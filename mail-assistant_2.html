@@ -972,7 +972,7 @@ async function openMailDetail(msgId, subject, sender) {
   try {
     const fullMsg = await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`);
 
-    // base64url 解碼（支援中文 UTF-8）
+    // 解碼工具：支援 base64 和 quoted-printable，自動處理 UTF-8 中文
     const b64decode = (data) => {
       try {
         const b64 = data.replace(/-/g,'+').replace(/_/g,'/');
@@ -982,13 +982,34 @@ async function openMailDetail(msgId, subject, sender) {
         return new TextDecoder('utf-8').decode(bytes);
       } catch(e) { return ''; }
     };
-    // 找 body
+
+    const decodeQP = (str) => {
+      // 解碼 quoted-printable
+      return str
+        .replace(/=\r?\n/g,'')
+        .replace(/=([0-9A-Fa-f]{2})/g, (_,h)=>String.fromCharCode(parseInt(h,16)));
+    };
+
+    const decodeContent = (part) => {
+      if(!part.body?.data) return '';
+      const encoding = (part.headers||[]).find(h=>h.name.toLowerCase()==='content-transfer-encoding')?.value||'';
+      if(encoding.toLowerCase()==='quoted-printable'){
+        const raw = atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));
+        const qp = decodeQP(raw);
+        const bytes = new Uint8Array(qp.length);
+        for(let i=0;i<qp.length;i++) bytes[i]=qp.charCodeAt(i);
+        return new TextDecoder('utf-8').decode(bytes);
+      }
+      return b64decode(part.body.data);
+    };
+
+    // 遞迴找 body，優先 HTML，其次 plain text
     const findBody = (part) => {
       if(!part) return '';
       if(part.mimeType==='text/html' && part.body?.data)
-        return b64decode(part.body.data);
+        return decodeContent(part);
       if(part.mimeType==='text/plain' && part.body?.data)
-        return '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.7;">'+b64decode(part.body.data)+'</pre>';
+        return '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.7;">'+decodeContent(part)+'</pre>';
       if(part.parts){ for(const p of part.parts){ const r=findBody(p); if(r) return r; } }
       return '';
     };
