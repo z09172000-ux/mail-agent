@@ -693,11 +693,21 @@ async function doForward(msgId,subject,targets,groupName){
   try{
     const fullMsg = await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`);
 
+    // base64url 解碼（支援中文 UTF-8）
+    const b64decode2 = (data) => {
+      try {
+        const b64 = data.replace(/-/g,'+').replace(/_/g,'/');
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+        return new TextDecoder('utf-8').decode(bytes);
+      } catch(e) { return ''; }
+    };
     // 遞迴找 body
     const findBody=(part)=>{
       if(!part)return'';
-      if(part.mimeType==='text/html'&&part.body?.data)return atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));
-      if(part.mimeType==='text/plain'&&part.body?.data)return'<pre style="white-space:pre-wrap;">'+atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'))+'</pre>';
+      if(part.mimeType==='text/html'&&part.body?.data)return b64decode2(part.body.data);
+      if(part.mimeType==='text/plain'&&part.body?.data)return'<pre style="white-space:pre-wrap;">'+b64decode2(part.body.data)+'</pre>';
       if(part.parts){for(const p of part.parts){const r=findBody(p);if(r)return r;}}
       return'';
     };
@@ -962,13 +972,23 @@ async function openMailDetail(msgId, subject, sender) {
   try {
     const fullMsg = await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`);
 
+    // base64url 解碼（支援中文 UTF-8）
+    const b64decode = (data) => {
+      try {
+        const b64 = data.replace(/-/g,'+').replace(/_/g,'/');
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+        return new TextDecoder('utf-8').decode(bytes);
+      } catch(e) { return ''; }
+    };
     // 找 body
     const findBody = (part) => {
       if(!part) return '';
       if(part.mimeType==='text/html' && part.body?.data)
-        return atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));
+        return b64decode(part.body.data);
       if(part.mimeType==='text/plain' && part.body?.data)
-        return '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.7;">'+atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'))+'</pre>';
+        return '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.7;">'+b64decode(part.body.data)+'</pre>';
       if(part.parts){ for(const p of part.parts){ const r=findBody(p); if(r) return r; } }
       return '';
     };
