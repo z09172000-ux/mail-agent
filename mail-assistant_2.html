@@ -389,6 +389,53 @@
   </div>
 </div>
 
+<!-- REPLY DRAFT MODAL -->
+<div class="modal-overlay" id="reply-modal" onclick="closeReplyModal()">
+  <div class="modal" style="max-height:90vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:16px;font-weight:700;">✍️ 編輯回覆草稿</div>
+      <button onclick="closeReplyModal()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;">✕</button>
+    </div>
+    <input type="hidden" id="reply-modal-msgid">
+    <div class="input-row">
+      <div class="input-label">收件人</div>
+      <input class="input-field" id="reply-modal-to" type="email" placeholder="收件人 Email">
+    </div>
+    <div class="input-row">
+      <div class="input-label">主旨</div>
+      <input class="input-field" id="reply-modal-subject" type="text" placeholder="主旨">
+    </div>
+    <div class="input-row">
+      <div class="input-label">內容（在此撰寫或修改）</div>
+      <textarea class="compose-textarea" id="reply-modal-body" placeholder="在此輸入回覆內容..." style="min-height:180px;"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-full btn-cancel" onclick="closeReplyModal()">取消</button>
+      <button class="btn-full btn-confirm" onclick="submitReplyDraft()">📝 儲存到 Gmail 草稿</button>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal-overlay" id="detail-modal" onclick="closeDetailModal()">
+  <div class="modal" style="max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;">
+      <div style="flex:1">
+        <div class="modal-title" id="detail-modal-title" style="font-size:15px;line-height:1.4;"></div>
+        <div id="detail-modal-sender" style="font-size:12px;color:var(--text3);margin-top:2px;"></div>
+      </div>
+      <button onclick="closeDetailModal()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;padding:0 0 0 10px;">✕</button>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:10px 0;">
+    <div id="detail-modal-body"></div>
+    <div style="margin-top:14px;">
+      <button class="btn-full btn-cancel" onclick="closeDetailModal()">關閉</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const CLIENT_ID = '226682198972-d7s6q22h1niuek9u5te78u5br52vi820.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.compose';
@@ -595,8 +642,10 @@ function renderMailCard(msg,subject,from,date,type) {
       <button class="btn-sm btn-danger" onclick="trashMail('${msg.id}',this)">🗑</button>`;
   }
   return `<div class="mail-card type-${type}">
-    <div class="mail-top"><div class="mail-sender">${esc(sender.substring(0,22))}</div><div class="mail-date">${date}</div></div>
-    <div class="mail-subject">${esc(subject.substring(0,52))}</div>
+    <div class="mail-top" onclick="openMailDetail('${msg.id}','${esc(subject).replace(/'/g,"\\'").replace(/`/g,"\\`")}','${esc(sender).replace(/'/g,"\\'").replace(/`/g,"\\`")}')" style="cursor:pointer">
+      <div class="mail-sender">${esc(sender.substring(0,22))}</div><div class="mail-date">${date} ›</div>
+    </div>
+    <div class="mail-subject" onclick="openMailDetail('${msg.id}','${esc(subject).replace(/'/g,"\\'").replace(/`/g,"\\`")}','${esc(sender).replace(/'/g,"\\'").replace(/`/g,"\\`")}')" style="cursor:pointer">${esc(subject.substring(0,52))}</div>
     <div class="mail-snippet">${esc((msg.snippet||'').substring(0,60))}</div>
     <div class="mail-tags"><span class="tag ${info.color}">${info.label}</span></div>
     <div class="mail-actions">${actions}</div>
@@ -719,27 +768,33 @@ function makeEmailWithAttachments(from, bcc, subject, htmlBody, attachments) {
 // ── REPLY DRAFT ──
 function openReplyDraft(msgId, subject, senderName, senderEmail) {
   const cleanEmail = senderEmail.match(/<(.+?)>/)?.[1] || senderEmail;
-  openModal(
-    '建立回覆草稿',
-    `收件人：${senderName}\n主旨：Re: ${subject}\n\n草稿內容為空白，建立後請到 Gmail 草稿區填寫並寄出。`,
-    '📝 建立草稿',
-    ()=>createReplyDraft(msgId, cleanEmail, subject)
-  );
+  // 開啟編輯草稿視窗
+  document.getElementById('reply-modal-to').value = cleanEmail;
+  document.getElementById('reply-modal-subject').value = 'Re: ' + subject;
+  document.getElementById('reply-modal-body').value = '';
+  document.getElementById('reply-modal-msgid').value = msgId;
+  document.getElementById('reply-modal').classList.add('open');
 }
 
-async function createReplyDraft(msgId, toEmail, subject) {
+async function submitReplyDraft() {
+  const to = document.getElementById('reply-modal-to').value.trim();
+  const subject = document.getElementById('reply-modal-subject').value.trim();
+  const body = document.getElementById('reply-modal-body').value.trim();
+  const msgId = document.getElementById('reply-modal-msgid').value;
+  if(!to){ showToast('⚠️ 收件人不能為空'); return; }
+  const htmlBody = '<div style="font-family:\'Noto Sans TC\',sans-serif;font-size:14px;line-height:1.8;">' + body.replace(/\n/g,'<br>') + '</div>';
   try {
     await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts', {
       method:'POST',
-      body: JSON.stringify({
-        message: {
-          raw: makeEmail(toEmail, 'Re: '+subject, '<p>（請在此填寫回覆內容）</p>'),
-          threadId: msgId
-        }
-      })
+      body: JSON.stringify({ message: { raw: makeEmail(to, subject, htmlBody), threadId: msgId } })
     });
-    showToast('✅ 草稿已建立！請到 Gmail 草稿區查看');
+    showToast('✅ 草稿已儲存到 Gmail！');
+    closeReplyModal();
   } catch(e) { showToast('❌ 草稿建立失敗'); }
+}
+
+function closeReplyModal() {
+  document.getElementById('reply-modal').classList.remove('open');
 }
 
 // ── MEETING DRAFT ──
@@ -884,6 +939,58 @@ function openModal(title,body,confirmText,action){
   document.getElementById('modal-confirm').onclick=()=>{action();closeModal();};
   document.getElementById('modal').classList.add('open');
 }
+// ── MAIL DETAIL ──
+async function openMailDetail(msgId, subject, sender) {
+  // 顯示 loading
+  document.getElementById('detail-modal-title').textContent = subject || '（無主旨）';
+  document.getElementById('detail-modal-sender').textContent = sender;
+  document.getElementById('detail-modal-body').innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div class="loading-text">載入中...</div></div>';
+  document.getElementById('detail-modal').classList.add('open');
+
+  try {
+    const fullMsg = await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`);
+
+    // 找 body
+    const findBody = (part) => {
+      if(!part) return '';
+      if(part.mimeType==='text/html' && part.body?.data)
+        return atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));
+      if(part.mimeType==='text/plain' && part.body?.data)
+        return '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.7;">'+atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'))+'</pre>';
+      if(part.parts){ for(const p of part.parts){ const r=findBody(p); if(r) return r; } }
+      return '';
+    };
+    const bodyHtml = findBody(fullMsg.payload) || '<p style="color:#888">（無內容）</p>';
+
+    // 找附件
+    const attachments = [];
+    const findAtt = (part) => {
+      if(!part) return;
+      if(part.filename && part.filename.length>0 && part.body?.attachmentId)
+        attachments.push(part.filename);
+      if(part.parts) part.parts.forEach(p=>findAtt(p));
+    };
+    findAtt(fullMsg.payload);
+
+    let attHtml = '';
+    if(attachments.length) {
+      attHtml = `<div style="margin-top:12px;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">📎 附件（${attachments.length} 個）</div>
+        ${attachments.map(a=>`<div style="font-size:12px;color:var(--text2);padding:2px 0;">📄 ${esc(a)}</div>`).join('')}
+      </div>`;
+    }
+
+    document.getElementById('detail-modal-body').innerHTML =
+      `<div style="font-size:13px;line-height:1.7;color:var(--text2);">${bodyHtml}</div>${attHtml}`;
+  } catch(e) {
+    document.getElementById('detail-modal-body').innerHTML = '<p style="color:var(--red)">❌ 無法載入信件內容</p>';
+  }
+}
+
+function closeDetailModal() {
+  document.getElementById('detail-modal').classList.remove('open');
+}
+
 function closeModal(){document.getElementById('modal').classList.remove('open');}
 </script>
 </body>
