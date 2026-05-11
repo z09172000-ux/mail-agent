@@ -290,10 +290,13 @@
       <div class="member-stats">
         <div class="stat-card"><div class="stat-num">27</div><div class="stat-label">一般會員</div></div>
         <div class="stat-card"><div class="stat-num">12</div><div class="stat-label">理監事</div></div>
+        <div class="stat-card"><div class="stat-num">18</div><div class="stat-label">各縣市公會</div></div>
+        <div class="stat-card"><div class="stat-num">57</div><div class="stat-label">總計</div></div>
       </div>
-      <div class="group-tab-row">
+      <div class="group-tab-row" style="flex-wrap:wrap;">
         <button class="group-tab active" id="gtab-general" onclick="switchMemberGroup('general')">👥 一般會員</button>
         <button class="group-tab" id="gtab-board" onclick="switchMemberGroup('board')">🏛 理監事</button>
+        <button class="group-tab" id="gtab-assoc" onclick="switchMemberGroup('assoc')">🏢 各縣市公會</button>
       </div>
       <div id="member-list"></div>
     </div>
@@ -389,6 +392,35 @@
   </div>
 </div>
 
+<!-- FORWARD SELECT MODAL -->
+<div class="modal-overlay" id="fwd-modal" onclick="closeFwdModal()">
+  <div class="modal" style="max-height:88vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="font-size:16px;font-weight:700;">📢 選擇轉發對象</div>
+      <button onclick="closeFwdModal()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:10px;" id="fwd-modal-subject"></div>
+    <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;">
+      <button class="group-tab active" id="fwd-tab-general" onclick="switchFwdGroup('general')" style="padding:5px 10px;font-size:11px;">👥 一般會員</button>
+      <button class="group-tab" id="fwd-tab-board" onclick="switchFwdGroup('board')" style="padding:5px 10px;font-size:11px;">🏛 理監事</button>
+      <button class="group-tab" id="fwd-tab-assoc" onclick="switchFwdGroup('assoc')" style="padding:5px 10px;font-size:11px;">🏢 各縣市公會</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="font-size:13px;color:var(--text2);">已選 <span id="fwd-modal-count" style="color:var(--accent);font-weight:700;">0</span> 人</div>
+      <div style="display:flex;gap:8px;">
+        <span style="font-size:12px;color:var(--accent);cursor:pointer;" onclick="selectAllFwd(true)">全選</span>
+        <span style="font-size:12px;color:var(--text3);cursor:pointer;" onclick="selectAllFwd(false)">全消</span>
+      </div>
+    </div>
+    <div id="fwd-modal-list" style="margin-bottom:14px;max-height:45vh;overflow-y:auto;"></div>
+    <div class="modal-actions">
+      <button class="btn-full btn-cancel" onclick="closeFwdModal()">取消</button>
+      <button class="btn-full btn-confirm" onclick="submitForward()">✅ 確認發送</button>
+    </div>
+  </div>
+</div>
+
 <!-- REPLY DRAFT MODAL -->
 <div class="modal-overlay" id="reply-modal" onclick="closeReplyModal()">
   <div class="modal" style="max-height:90vh;overflow-y:auto;" onclick="event.stopPropagation()">
@@ -451,6 +483,27 @@ let keywords = {
   archive: ['檢送','函文','敬請查收','字第'],
   action: ['詢問','請問','退會','請教']
 };
+
+const membersAssoc = [
+  {name:'社團法人中華民國職能治療師公會全國聯合會',email:'oturoc@ms64.hinet.net'},
+  {name:'基隆市職能治療師公會',email:'keelungota@gmail.com'},
+  {name:'社團法人新北市職能治療師公會',email:'tpcotu@gmail.com'},
+  {name:'社團法人臺北市職能治療師公會',email:'taot@ms48.hinet.net'},
+  {name:'社團法人桃園市職能治療師公會',email:'taoyuanot.office@gmail.com'},
+  {name:'新竹市職能治療師公會',email:'hsinchuot@yahoo.com.tw'},
+  {name:'新竹縣職能治療師公會',email:'hccotu@gmail.com'},
+  {name:'苗栗縣職能治療師公會',email:'ot20211010@gmail.com'},
+  {name:'社團法人臺中市職能治療師公會',email:'tcotu.office@gmail.com'},
+  {name:'彰化縣職能治療師公會',email:'chcotu@gmail.com'},
+  {name:'社團法人南投縣職能治療師公會',email:'nantouot@hotmail.com'},
+  {name:'社團法人雲林縣職能治療師公會',email:'yunlinotu@hotmail.com'},
+  {name:'社團法人嘉義市職能治療師公會',email:'cycota600@gmail.com'},
+  {name:'社團法人台南市職能治療師公會',email:'TNOTU101@gmail.com'},
+  {name:'社團法人高雄市職能治療師公會',email:'kota96@gmail.com'},
+  {name:'社團法人屏東縣職能治療師公會',email:'ot.pingtung@gmail.com'},
+  {name:'宜蘭縣職能治療師公會',email:'ilanotpublic@gmail.com'},
+  {name:'社團法人花蓮縣職能治療師公會',email:'hualienot@gmail.com'}
+];
 
 const membersGeneral = [
   {name:'徐晏文',email:'she0628@gmail.com'},
@@ -672,15 +725,82 @@ async function trashMail(id,btn){
 }
 
 // ── FORWARD ──
-function confirmForward(msgId,subject,group){
-  const targets = group==='general'?membersGeneral:membersBoard;
-  const groupName = group==='general'?'一般會員 27 人':'理監事 12 人';
-  openModal(
-    '確認轉發',
-    `主旨：【轉發】${subject}\n\n轉發對象：${groupName}\n\n確認後將立即發送。`,
-    '✅ 確認發送',
-    ()=>doForward(msgId,subject,targets,groupName)
-  );
+let pendingFwdId='', pendingFwdSubject='';
+
+function confirmForward(msgId, subject, defaultGroup){
+  pendingFwdId = msgId;
+  pendingFwdSubject = subject;
+
+  // 建立勾選清單
+  const allMembers = defaultGroup==='board' ? membersBoard : defaultGroup==='assoc' ? membersAssoc : membersGeneral;
+  const initChecked = defaultGroup !== 'assoc'; // 公會預設不勾選
+  const listHtml = allMembers.map((m,i)=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+      <input type="checkbox" class="fwd-check" data-email="${m.email}" data-name="${m.name}" ${initChecked?'checked':''}
+        style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
+      <div>
+        <div style="font-size:13px;font-weight:500;">${m.name}</div>
+        <div style="font-size:11px;color:var(--text3);">${m.email}</div>
+      </div>
+    </label>`).join('');
+
+  document.getElementById('fwd-modal-subject').textContent = '【轉發】' + subject.substring(0,40);
+  document.getElementById('fwd-modal-list').innerHTML = listHtml;
+  document.getElementById('fwd-modal-count').textContent = initChecked ? allMembers.length : 0;
+  // 同步 tab 狀態
+  ['general','board','assoc'].forEach(x=>{
+    document.getElementById('fwd-tab-'+x)?.classList.toggle('active', x===defaultGroup);
+  });
+  document.getElementById('fwd-modal').classList.add('open');
+
+  // 勾選變動時更新數量
+  document.querySelectorAll('.fwd-check').forEach(cb=>{
+    cb.addEventListener('change', updateFwdCount);
+  });
+}
+
+function updateFwdCount(){
+  const checked = document.querySelectorAll('.fwd-check:checked').length;
+  document.getElementById('fwd-modal-count').textContent = checked;
+}
+
+function selectAllFwd(val){
+  document.querySelectorAll('.fwd-check').forEach(cb=>cb.checked=val);
+  updateFwdCount();
+}
+
+function switchFwdGroup(g){
+  ['general','board','assoc'].forEach(x=>{
+    document.getElementById('fwd-tab-'+x)?.classList.toggle('active',x===g);
+  });
+  const list = g==='board'?membersBoard:g==='assoc'?membersAssoc:membersGeneral;
+  const defaultChecked = g !== 'assoc'; // 公會預設不勾選
+  const listHtml = list.map(m=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+      <input type="checkbox" class="fwd-check" data-email="${m.email}" data-name="${m.name}" ${defaultChecked?'checked':''}
+        style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
+      <div>
+        <div style="font-size:13px;font-weight:500;">${m.name}</div>
+        <div style="font-size:11px;color:var(--text3);">${m.email}</div>
+      </div>
+    </label>`).join('');
+  document.getElementById('fwd-modal-list').innerHTML = listHtml;
+  document.getElementById('fwd-modal-count').textContent = defaultChecked ? list.length : 0;
+  document.querySelectorAll('.fwd-check').forEach(cb=>{
+    cb.addEventListener('change', updateFwdCount);
+  });
+}
+
+function closeFwdModal(){
+  document.getElementById('fwd-modal').classList.remove('open');
+}
+
+async function submitForward(){
+  const checked = document.querySelectorAll('.fwd-check:checked');
+  if(!checked.length){ showToast('⚠️ 請至少勾選一位會員'); return; }
+  const targets = Array.from(checked).map(cb=>({name:cb.dataset.name, email:cb.dataset.email}));
+  closeFwdModal();
+  await doForward(pendingFwdId, pendingFwdSubject, targets, `${targets.length} 位會員`);
 }
 
 async function doForward(msgId,subject,targets,groupName){
@@ -915,10 +1035,11 @@ function switchMemberGroup(g){
   currentMemberGroup=g;
   document.getElementById('gtab-general').classList.toggle('active',g==='general');
   document.getElementById('gtab-board').classList.toggle('active',g==='board');
+  document.getElementById('gtab-assoc').classList.toggle('active',g==='assoc');
   renderMembers();
 }
 function renderMembers(){
-  const list=currentMemberGroup==='general'?membersGeneral:membersBoard;
+  const list=currentMemberGroup==='general'?membersGeneral:currentMemberGroup==='board'?membersBoard:membersAssoc;
   document.getElementById('member-list').innerHTML=list.map(m=>`
     <div class="member-item">
       <div class="member-avatar">${m.name.charAt(0)}</div>
