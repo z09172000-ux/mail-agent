@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>郵件助手</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #222638; --border: #2e3248;
+    --accent: #5b8af5; --accent2: #7c5bf5; --green: #3ecf8e;
+    --red: #f5614a; --yellow: #f5c842; --text: #e8eaf6; --text2: #8b90b0; --text3: #555a7a;
+    --radius: 16px; --radius-sm: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; max-width: 420px; margin: 0 auto; overflow-x: hidden; }
+
+  /* LOGIN */
+  #login-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 32px; background: radial-gradient(ellipse at 50% 0%, rgba(91,138,245,0.15) 0%, transparent 60%); }
+  .login-logo { font-size: 56px; margin-bottom: 16px; }
+  .login-title { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  .login-title span { color: var(--accent); }
+  .login-sub { font-size: 14px; color: var(--text2); text-align: center; line-height: 1.6; margin-bottom: 40px; }
+  .login-features { width: 100%; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 32px; }
+  .login-feature { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text2); }
+  .login-feature:last-child { border-bottom: none; }
+  .btn-google { width: 100%; padding: 15px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 16px; font-weight: 700; font-family: inherit; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all .2s; }
+  .btn-google:active { transform: scale(.97); opacity: .9; }
+  .login-note { font-size: 11px; color: var(--text3); margin-top: 12px; text-align: center; }
+
+  /* APP */
+  #app-shell { display: none; }
+  .topbar { position: sticky; top: 0; z-index: 100; background: rgba(15,17,23,0.92); backdrop-filter: blur(16px); padding: 14px 20px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .topbar-title { font-size: 18px; font-weight: 700; }
+  .topbar-title span { color: var(--accent); }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+  .topbar-badge { background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; }
+  .conn-status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .conn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .user-avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; cursor: pointer; }
+
+  .tabs { display: flex; padding: 10px 16px 0; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex-shrink: 0; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; border: 1.5px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; transition: all .2s; font-family: inherit; }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tab .count { display: inline-block; background: rgba(255,255,255,.2); font-size: 11px; padding: 1px 5px; border-radius: 10px; margin-left: 3px; }
+
+  .page { display: none; padding: 12px 16px 100px; }
+  .page.active { display: block; }
+
+  .loading-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; gap: 14px; }
+  .spinner { width: 34px; height: 34px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 14px; color: var(--text2); }
+
+  .sec-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; margin-top: 10px; }
+  .sec-title { font-size: 12px; color: var(--text2); font-weight: 600; letter-spacing: .5px; text-transform: uppercase; }
+  .sec-action { font-size: 12px; color: var(--accent); cursor: pointer; }
+
+  .mail-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 13px 15px; margin-bottom: 8px; cursor: pointer; transition: all .2s; position: relative; overflow: hidden; }
+  .mail-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+  .mail-card.urgent::before { background: var(--red); }
+  .mail-card.course::before { background: var(--yellow); }
+  .mail-card.finance::before { background: var(--green); }
+  .mail-card.info::before { background: var(--accent); }
+  .mail-card.ad::before { background: var(--text3); }
+  .mail-card:active { transform: scale(.985); }
+  .mail-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .mail-sender { font-size: 14px; font-weight: 600; flex: 1; }
+  .mail-date { font-size: 11px; color: var(--text3); flex-shrink: 0; }
+  .mail-subject { font-size: 13px; color: var(--text2); margin-top: 3px; line-height: 1.4; }
+  .mail-snippet { font-size: 12px; color: var(--text3); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mail-tags { display: flex; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 8px; font-weight: 500; }
+  .tag.urgent { background: rgba(245,97,74,.15); color: var(--red); }
+  .tag.course { background: rgba(245,200,66,.15); color: var(--yellow); }
+  .tag.finance { background: rgba(62,207,142,.15); color: var(--green); }
+  .tag.info { background: rgba(91,138,245,.15); color: var(--accent); }
+  .tag.ad { background: rgba(85,90,122,.15); color: var(--text3); }
+  .mail-actions { display: flex; gap: 6px; margin-top: 9px; }
+  .btn-sm { flex: 1; padding: 8px 0; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; border: none; cursor: pointer; transition: all .15s; font-family: inherit; }
+  .btn-sm:active { transform: scale(.96); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-danger { background: rgba(245,97,74,.12); color: var(--red); border: 1.5px solid rgba(245,97,74,.25); }
+  .btn-ghost { background: var(--surface2); color: var(--text2); }
+  .btn-yellow { background: rgba(245,200,66,.12); color: var(--yellow); border: 1.5px solid rgba(245,200,66,.25); }
+
+  .alert-banner { background: linear-gradient(135deg, rgba(245,200,66,.1), rgba(245,97,74,.06)); border: 1.5px solid rgba(245,200,66,.25); border-radius: var(--radius); padding: 13px 15px; margin-bottom: 12px; display: flex; gap: 12px; align-items: flex-start; }
+  .alert-icon { font-size: 20px; flex-shrink: 0; }
+  .alert-title { font-size: 14px; font-weight: 700; color: var(--yellow); }
+  .alert-body { font-size: 12px; color: var(--text2); margin-top: 3px; line-height: 1.5; }
+
+  .member-upload { background: var(--surface); border: 2px dashed var(--border); border-radius: var(--radius); padding: 26px 20px; text-align: center; cursor: pointer; margin-bottom: 12px; transition: border-color .2s; }
+  .member-upload:active { border-color: var(--accent); }
+  .upload-icon { font-size: 30px; margin-bottom: 8px; }
+  .upload-text { font-size: 14px; font-weight: 600; }
+  .upload-sub { font-size: 12px; color: var(--text3); margin-top: 4px; }
+  .member-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .stat-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 14px; text-align: center; }
+  .stat-num { font-size: 26px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .member-item { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 11px 13px; margin-bottom: 6px; display: flex; align-items: center; gap: 11px; }
+  .member-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .member-info { flex: 1; }
+  .member-name { font-size: 14px; font-weight: 500; }
+  .member-email { font-size: 12px; color: var(--text3); margin-top: 1px; }
+  .member-del { color: var(--text3); font-size: 16px; cursor: pointer; padding: 4px; }
+
+  .settings-section { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
+  .settings-row { padding: 13px 15px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-icon { font-size: 17px; width: 26px; text-align: center; flex-shrink: 0; }
+  .settings-info { flex: 1; }
+  .settings-label { font-size: 14px; font-weight: 500; }
+  .settings-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .toggle { width: 42px; height: 23px; border-radius: 12px; background: var(--border); position: relative; cursor: pointer; transition: background .2s; flex-shrink: 0; }
+  .toggle.on { background: var(--accent); }
+  .toggle::after { content: ''; position: absolute; width: 17px; height: 17px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: transform .2s; }
+  .toggle.on::after { transform: translateX(19px); }
+  .keyword-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .keyword-chip { background: var(--surface2); border: 1.5px solid var(--border); border-radius: 20px; padding: 4px 11px; font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 5px; }
+  .chip-del { color: var(--text3); cursor: pointer; }
+  .chip-add { background: transparent; border: 1.5px dashed var(--border); border-radius: 20px; padding: 4px 11px; font-size: 12px; color: var(--accent); cursor: pointer; }
+
+  .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 420px; background: rgba(15,17,23,0.95); backdrop-filter: blur(16px); border-top: 1px solid var(--border); display: flex; padding: 8px 0 20px; z-index: 100; }
+  .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; padding: 5px 0; color: var(--text3); transition: color .2s; }
+  .nav-item.active { color: var(--accent); }
+  .nav-icon { font-size: 20px; }
+  .nav-label { font-size: 10px; font-weight: 500; }
+
+  .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(16px); background: var(--surface2); border: 1.5px solid var(--border); border-radius: 20px; padding: 9px 18px; font-size: 13px; color: var(--text); opacity: 0; transition: all .3s; pointer-events: none; white-space: nowrap; z-index: 200; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,.6); backdrop-filter: blur(4px); align-items: flex-end; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1.5px solid var(--border); border-radius: 24px 24px 0 0; padding: 20px 20px 40px; width: 100%; max-width: 420px; animation: slideUp .3s ease; }
+  @keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+  .modal-handle { width: 38px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 14px; }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+  .modal-body { font-size: 14px; color: var(--text2); line-height: 1.6; white-space: pre-line; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+  .btn-full { flex: 1; padding: 13px 0; border-radius: var(--radius-sm); font-size: 14px; font-weight: 700; border: none; cursor: pointer; font-family: inherit; transition: all .15s; }
+  .btn-full:active { transform: scale(.97); }
+  .btn-confirm { background: var(--accent); color: #fff; }
+  .btn-cancel { background: var(--surface2); color: var(--text2); }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--text3); font-size: 14px; line-height: 1.8; }
+  .empty-icon { font-size: 38px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-logo">📬</div>
+  <div class="login-title">郵件<span>助手</span></div>
+  <div class="login-sub">連結 Gmail，讓 AI 幫你分類信件、<br>偵測課程、一鍵轉發給會員</div>
+  <div class="login-features">
+    <div class="login-feature"><span>📥</span> 自動分類未讀信件</div>
+    <div class="login-feature"><span>📢</span> 課程信件偵測 + 轉發</div>
+    <div class="login-feature"><span>👥</span> 會員名單 CSV 匯入</div>
+    <div class="login-feature"><span>🗑</span> 一鍵移至垃圾桶</div>
+  </div>
+  <button class="btn-google" onclick="startLogin()">🔗 使用 Gmail 帳號登入</button>
+  <div class="login-note">僅讀取、發送你授權的郵件，不儲存任何資料</div>
+</div>
+
+<!-- APP -->
+<div id="app-shell">
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">郵件<span>助手</span></div>
+      <div class="conn-status"><div class="conn-dot"></div><span id="topbar-email">載入中...</span></div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-badge" id="unread-badge">讀取中</div>
+      <div class="user-avatar" id="user-avatar" onclick="confirmLogout()">?</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('inbox')">收件匣 <span class="count" id="tab-inbox-count">...</span></button>
+    <button class="tab" onclick="switchTab('course')">課程轉發 <span class="count" id="tab-course-count">0</span></button>
+    <button class="tab" onclick="switchTab('members')">會員名單</button>
+    <button class="tab" onclick="switchTab('settings')">設定</button>
+  </div>
+
+  <div class="page active" id="page-inbox">
+    <div id="inbox-loading" class="loading-wrap"><div class="spinner"></div><div class="loading-text">正在讀取信件...</div></div>
+    <div id="inbox-content" style="display:none;margin-top:12px"></div>
+  </div>
+
+  <div class="page" id="page-course">
+    <div style="margin-top:12px" id="course-content">
+      <div class="empty-state"><div class="empty-icon">📭</div>尚未偵測到課程信件</div>
+    </div>
+  </div>
+
+  <div class="page" id="page-members">
+    <div style="margin-top:12px">
+      <div class="member-upload" onclick="document.getElementById('csv-input').click()">
+        <div class="upload-icon">📂</div>
+        <div class="upload-text">匯入會員名單</div>
+        <div class="upload-sub">支援 .csv 格式（第一欄：姓名，第二欄：Email）</div>
+      </div>
+      <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="loadCSV(event)">
+      <div class="member-stats">
+        <div class="stat-card"><div class="stat-num" id="member-count">0</div><div class="stat-label">會員總數</div></div>
+        <div class="stat-card"><div class="stat-num" id="forward-count">0</div><div class="stat-label">本次轉發</div></div>
+      </div>
+      <div class="sec-header">
+        <div class="sec-title">👥 會員列表</div>
+        <div class="sec-action" onclick="clearMembers()">清除全部</div>
+      </div>
+      <div id="member-list">
+        <div class="empty-state"><div class="empty-icon">👤</div>尚未匯入會員名單<br><span style="font-size:12px">請上傳含「姓名, Email」兩欄的 CSV 檔</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page" id="page-settings">
+    <div style="margin-top:12px">
+      <div class="sec-header"><div class="sec-title">🔗 帳號</div></div>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div class="settings-icon">📧</div>
+          <div class="settings-info"><div class="settings-label">Gmail 帳號</div><div class="settings-sub" id="settings-email">未登入</div></div>
+        </div>
+        <div class="settings-row" style="cursor:pointer" onclick="loadInbox()">
+          <div class="settings-icon">🔄</div>
+          <div class="settings-info"><div class="settings-label">重新整理信件</div></div>
+        </div>
+        <div class="settings-row" style="cursor:pointer" onclick="confirmLogout()">
+          <div class="settings-icon">🚪</div>
+          <div class="settings-info"><div class="settings-label" style="color:var(--red)">登出</div></div>
+        </div>
+      </div>
+
+      <div class="sec-header"><div class="sec-title">📡 課程偵測規則</div></div>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div class="settings-icon">🏷</div>
+          <div class="settings-info">
+            <div class="settings-label">主旨關鍵字</div>
+            <div class="keyword-chips" id="keyword-chips"></div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-icon">📮</div>
+          <div class="settings-info">
+            <div class="settings-label">固定寄件人</div>
+            <div class="keyword-chips" id="sender-chips"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec-header"><div class="sec-title">⚙️ 轉發設定</div></div>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div class="settings-icon">🔔</div>
+          <div class="settings-info"><div class="settings-label">轉發前通知我</div><div class="settings-sub">偵測後等待確認再發送</div></div>
+          <div class="toggle on" id="toggle-confirm" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-icon">📝</div>
+          <div class="settings-info"><div class="settings-label">自動加上【轉發】前綴</div></div>
+          <div class="toggle on" id="toggle-prefix" onclick="this.classList.toggle('on')"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-nav">
+    <div class="nav-item active" id="nav-inbox" onclick="switchTab('inbox');setNav('inbox')"><div class="nav-icon">📥</div><div class="nav-label">收件匣</div></div>
+    <div class="nav-item" id="nav-course" onclick="switchTab('course');setNav('course')"><div class="nav-icon">📢</div><div class="nav-label">課程轉發</div></div>
+    <div class="nav-item" id="nav-members" onclick="switchTab('members');setNav('members')"><div class="nav-icon">👥</div><div class="nav-label">會員</div></div>
+    <div class="nav-item" id="nav-settings" onclick="switchTab('settings');setNav('settings')"><div class="nav-icon">⚙️</div><div class="nav-label">設定</div></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="modal-overlay" id="modal" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-title"></div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-actions">
+      <button class="btn-full btn-cancel" onclick="closeModal()">取消</button>
+      <button class="btn-full btn-confirm" id="modal-confirm">確認</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CLIENT_ID = '226682198972-d7s6q22h1niuek9u5te78u5br52vi820.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify';
+
+let accessToken = null, userEmail = '', members = [], detectedMessages = [], forwardCount = 0;
+let keywords = ['課程','研習','工作坊','講座'];
+let senderFilters = [];
+
+// ── AUTH ──
+function startLogin() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID, scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) { showToast('❌ 登入失敗：' + resp.error); return; }
+      accessToken = resp.access_token;
+      const profile = await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/profile');
+      userEmail = profile.emailAddress || '';
+      document.getElementById('topbar-email').textContent = userEmail;
+      document.getElementById('settings-email').textContent = userEmail + ' ✅';
+      document.getElementById('user-avatar').textContent = userEmail.charAt(0).toUpperCase();
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-shell').style.display = 'block';
+      renderKeywords(); renderSenders();
+      loadInbox();
+    }
+  });
+  client.requestAccessToken();
+}
+
+function confirmLogout() {
+  openModal('登出帳號', '確定要登出 ' + userEmail + ' 嗎？', '登出', () => {
+    accessToken = null;
+    document.getElementById('app-shell').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+    showToast('已登出');
+  });
+}
+
+async function gmailFetch(url, options = {}) {
+  const res = await fetch(url, { ...options, headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json', ...(options.headers||{}) } });
+  return res.json();
+}
+
+// ── INBOX ──
+async function loadInbox() {
+  document.getElementById('inbox-loading').style.display = 'flex';
+  document.getElementById('inbox-content').style.display = 'none';
+  try {
+    const data = await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&q=is:unread&maxResults=30');
+    const messages = data.messages || [];
+    document.getElementById('unread-badge').textContent = messages.length + ' 未讀';
+    document.getElementById('tab-inbox-count').textContent = messages.length;
+    const details = await Promise.all(messages.slice(0,20).map(m =>
+      gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`)
+    ));
+    renderInbox(details);
+    detectCourse(details);
+  } catch(e) { showToast('❌ 讀取失敗，請重試'); }
+  document.getElementById('inbox-loading').style.display = 'none';
+  document.getElementById('inbox-content').style.display = 'block';
+}
+
+function getHeader(msg, name) { return (msg.payload?.headers||[]).find(h=>h.name===name)?.value || ''; }
+function formatDate(d) {
+  if (!d) return '';
+  const dt = new Date(d), now = new Date();
+  return dt.toDateString()===now.toDateString() ? '今天' : (dt.getMonth()+1)+'/'+dt.getDate();
+}
+function classifyEmail(subject, from) {
+  if (keywords.some(k=>subject.includes(k)) || senderFilters.some(s=>from.toLowerCase().includes(s.toLowerCase()))) return 'course';
+  if (/發票|對帳單|訂單|付款|申購/.test(subject)) return 'finance';
+  if (/render|github|railway|failed|exceeded/i.test(from)) return 'urgent';
+  if (/pinterest|gaiconf|readingoutpost|notion.*mail/i.test(from) || /廣告|電子報|推薦|特訓|活動|小聚/i.test(subject)) return 'ad';
+  return 'info';
+}
+function typeLabel(t) { return {urgent:'緊急',course:'課程偵測',finance:'財務',ad:'廣告',info:'一般'}[t]||t; }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function renderInbox(messages) {
+  const groups = {urgent:[],course:[],finance:[],info:[],ad:[]};
+  messages.forEach(msg => {
+    const subject = getHeader(msg,'Subject')||'（無主旨）';
+    const from = getHeader(msg,'From')||'';
+    const date = formatDate(getHeader(msg,'Date'));
+    const type = classifyEmail(subject, from);
+    groups[type].push({msg,subject,from,date,type});
+  });
+  const labels = {urgent:['⚠️','需要關注'],course:['📢','課程偵測'],finance:['💰','財務帳務'],info:['📨','一般信件'],ad:['🗑','廣告 / 電子報']};
+  let html = '';
+  Object.entries(labels).forEach(([type,[icon,label]])=>{
+    if (!groups[type].length) return;
+    html += `<div class="sec-header"><div class="sec-title">${icon} ${label}</div></div>`;
+    groups[type].forEach(({msg,subject,from,date,type})=>{
+      const sender = from.replace(/<[^>]+>/,'').replace(/"/g,'').trim() || from;
+      html += `<div class="mail-card ${type}">
+        <div class="mail-top"><div class="mail-sender">${esc(sender.substring(0,22))}</div><div class="mail-date">${date}</div></div>
+        <div class="mail-subject">${esc(subject.substring(0,52))}</div>
+        <div class="mail-snippet">${esc((msg.snippet||'').substring(0,60))}</div>
+        <div class="mail-tags"><span class="tag ${type}">${typeLabel(type)}</span></div>
+        <div class="mail-actions">
+          <button class="btn-sm btn-ghost" onclick="markRead('${msg.id}',this)">標記已讀</button>
+          <button class="btn-sm btn-danger" onclick="trashMail('${msg.id}',this)">🗑 刪除</button>
+        </div>
+      </div>`;
+    });
+  });
+  if (!html) html = '<div class="empty-state"><div class="empty-icon">🎉</div>沒有未讀信件！</div>';
+  document.getElementById('inbox-content').innerHTML = html;
+}
+
+async function markRead(id, btn) {
+  btn.textContent='處理中...'; btn.disabled=true;
+  await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${id}/modify`,{method:'POST',body:JSON.stringify({removeLabelIds:['UNREAD']})});
+  btn.closest('.mail-card').style.opacity='0.4';
+  showToast('✅ 已標記已讀');
+}
+async function trashMail(id, btn) {
+  btn.textContent='處理中...'; btn.disabled=true;
+  await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${id}/trash`,{method:'POST'});
+  btn.closest('.mail-card').style.opacity='0.4';
+  showToast('🗑 已移至垃圾桶');
+}
+
+// ── COURSE ──
+function detectCourse(messages) {
+  detectedMessages = messages.filter(msg=>{
+    const s = getHeader(msg,'Subject')||'';
+    const f = getHeader(msg,'From')||'';
+    return classifyEmail(s,f)==='course';
+  });
+  document.getElementById('tab-course-count').textContent = detectedMessages.length;
+  const container = document.getElementById('course-content');
+  if (!detectedMessages.length) { container.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>尚未偵測到課程信件</div>'; return; }
+  let html = `<div class="alert-banner"><div class="alert-icon">📋</div><div><div class="alert-title">偵測到 ${detectedMessages.length} 封課程信件</div><div class="alert-body">確認後將轉發給 ${members.length} 位會員</div></div></div>`;
+  detectedMessages.forEach(msg=>{
+    const subject = getHeader(msg,'Subject')||'（無主旨）';
+    const from = getHeader(msg,'From')||'';
+    const date = formatDate(getHeader(msg,'Date'));
+    const sender = from.replace(/<[^>]+>/,'').replace(/"/g,'').trim();
+    const msgId = msg.id;
+    html+=`<div class="mail-card course">
+      <div class="mail-top"><div class="mail-sender">${esc(sender.substring(0,22))}</div><div class="mail-date">${date}</div></div>
+      <div class="mail-subject">${esc(subject.substring(0,52))}</div>
+      <div class="mail-snippet">${esc((msg.snippet||'').substring(0,60))}</div>
+      <div class="mail-tags"><span class="tag course">課程偵測</span></div>
+      <div style="margin-top:9px;padding:9px 11px;background:var(--surface2);border-radius:8px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">轉發預覽</div>
+        <div style="font-size:13px;color:var(--text2);">【轉發】${esc(subject.substring(0,40))}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px;">→ ${members.length} 位會員</div>
+      </div>
+      <div class="mail-actions">
+        <button class="btn-sm btn-primary" onclick="confirmForward('${msgId}','${esc(subject).replace(/'/g,"\\'")}')">✅ 確認轉發</button>
+        <button class="btn-sm btn-danger" onclick="this.closest('.mail-card').remove();showToast('已略過')">略過</button>
+      </div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function confirmForward(msgId, subject) {
+  if (!members.length) { showToast('⚠️ 請先到「會員名單」匯入 CSV'); return; }
+  openModal('確認轉發給 '+members.length+' 位會員', `主旨：【轉發】${subject}\n\n轉發對象：${members.length} 位會員\n\n確認後將立即透過你的 Gmail 發送。`, '✅ 確認發送', ()=>doForward(msgId, subject));
+}
+
+async function doForward(msgId, subject) {
+  showToast('發送中，請稍候...');
+  const usePrefix = document.getElementById('toggle-prefix').classList.contains('on');
+  const finalSubject = (usePrefix ? '【轉發】' : '') + subject;
+  let ok = 0;
+  for (const m of members) {
+    try {
+      const raw = makeEmail(m.email, finalSubject, `<p>（轉發自 ${userEmail}）</p><p>${subject}</p>`);
+      await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',body:JSON.stringify({raw})});
+      ok++;
+    } catch(e){}
+  }
+  forwardCount += ok;
+  document.getElementById('forward-count').textContent = forwardCount;
+  showToast(`✅ 已成功轉發給 ${ok} 位會員！`);
+}
+
+function makeEmail(to, subject, html) {
+  const msg = ['To: '+to,'From: '+userEmail,'Subject: =?UTF-8?B?'+btoa(unescape(encodeURIComponent(subject)))+'?=','MIME-Version: 1.0','Content-Type: text/html; charset=UTF-8','',html].join('\r\n');
+  return btoa(unescape(encodeURIComponent(msg))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+// ── CSV ──
+function loadCSV(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const lines = ev.target.result.split('\n').filter(l=>l.trim());
+    members = [];
+    lines.forEach(line=>{
+      const p = line.split(',');
+      if (p.length>=2) { const name=p[0].trim().replace(/"/g,''), email=p[1].trim().replace(/"/g,''); if (email.includes('@')) members.push({name,email}); }
+    });
+    document.getElementById('member-count').textContent = members.length;
+    renderMembers(); showToast(`✅ 匯入 ${members.length} 位會員`);
+  };
+  reader.readAsText(file,'UTF-8');
+}
+function renderMembers() {
+  const c = document.getElementById('member-list');
+  if (!members.length) { c.innerHTML='<div class="empty-state"><div class="empty-icon">👤</div>尚未匯入會員名單</div>'; return; }
+  c.innerHTML = members.map((m,i)=>`<div class="member-item"><div class="member-avatar">${m.name.charAt(0)||'?'}</div><div class="member-info"><div class="member-name">${esc(m.name)}</div><div class="member-email">${esc(m.email)}</div></div><div class="member-del" onclick="removeMember(${i})">✕</div></div>`).join('');
+}
+function removeMember(i) { members.splice(i,1); document.getElementById('member-count').textContent=members.length; renderMembers(); showToast('已移除'); }
+function clearMembers() { openModal('清除全部','確定清除 '+members.length+' 位會員資料？','清除',()=>{ members=[]; document.getElementById('member-count').textContent=0; renderMembers(); showToast('已清除'); }); }
+
+// ── SETTINGS ──
+function renderKeywords() {
+  document.getElementById('keyword-chips').innerHTML = keywords.map(k=>`<span class="keyword-chip">${esc(k)} <span class="chip-del" onclick="removeKeyword('${esc(k)}')">✕</span></span>`).join('')+`<span class="chip-add" onclick="addKeyword()">＋ 新增</span>`;
+}
+function addKeyword() { const k=prompt('新增關鍵字：'); if(k?.trim()){keywords.push(k.trim());renderKeywords();} }
+function removeKeyword(k) { keywords=keywords.filter(x=>x!==k); renderKeywords(); }
+function renderSenders() {
+  document.getElementById('sender-chips').innerHTML = senderFilters.map(s=>`<span class="keyword-chip">${esc(s)} <span class="chip-del" onclick="removeSender('${esc(s)}')">✕</span></span>`).join('')+`<span class="chip-add" onclick="addSender()">＋ 新增寄件人</span>`;
+}
+function addSender() { const s=prompt('新增寄件人 Email（或部分網域）：'); if(s?.trim()){senderFilters.push(s.trim());renderSenders();} }
+function removeSender(s) { senderFilters=senderFilters.filter(x=>x!==s); renderSenders(); }
+
+// ── UI ──
+function switchTab(tab) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+tab).classList.add('active');
+  ['inbox','course','members','settings'].forEach((t,i)=>{ if(t===tab) document.querySelectorAll('.tab')[i]?.classList.add('active'); });
+}
+function setNav(tab) { document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active')); document.getElementById('nav-'+tab)?.classList.add('active'); }
+
+let toastTimer;
+function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2500); }
+
+function openModal(title,body,confirmText,action) {
+  document.getElementById('modal-title').textContent=title;
+  document.getElementById('modal-body').textContent=body;
+  document.getElementById('modal-confirm').textContent=confirmText;
+  document.getElementById('modal-confirm').onclick=()=>{action();closeModal();};
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+</script>
+</body>
+</html>
