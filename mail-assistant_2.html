@@ -629,42 +629,91 @@ function confirmForward(msgId,subject,group){
 }
 
 async function doForward(msgId,subject,targets,groupName){
-  showToast('發送中...');
+  showToast('準備中，取得附件...');
   const usePrefix = document.getElementById('toggle-prefix').classList.contains('on');
   const finalSubject = (usePrefix?'【轉發】':'')+subject;
-  let originalBody='';
+
+  // 取得完整信件含附件
+  let originalBody='', attachments=[];
   try{
-    const fullMsg=await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`);
+    const fullMsg = await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`);
+
+    // 遞迴找 body
     const findBody=(part)=>{
       if(!part)return'';
       if(part.mimeType==='text/html'&&part.body?.data)return atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));
-      if(part.mimeType==='text/plain'&&part.body?.data)return'<pre>'+atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'))+'</pre>';
+      if(part.mimeType==='text/plain'&&part.body?.data)return'<pre style="white-space:pre-wrap;">'+atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'))+'</pre>';
       if(part.parts){for(const p of part.parts){const r=findBody(p);if(r)return r;}}
       return'';
     };
-    originalBody=findBody(fullMsg.payload)||`<p>${fullMsg.snippet||''}</p>`;
-  }catch(e){originalBody='<p>（無法載入原始內容）</p>';}
+    originalBody = findBody(fullMsg.payload)||`<p>${fullMsg.snippet||''}</p>`;
 
-  const emailHtml=`<div style="font-family:'Noto Sans TC',Arial,sans-serif;font-size:14px;color:#333;line-height:1.8;">
-  <p>各位會員好：</p><p>如標題附件，請參考，謝謝。</p>
-  <hr style="border:none;border-top:1px solid #ddd;margin:16px 0;">
-  ${originalBody}
-  <hr style="border:none;border-top:1px solid #ddd;margin:16px 0;">
-  <p style="color:#555;font-size:13px;line-height:2;">
-    社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>
-    理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>
-    E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a>
-  </p></div>`;
+    // 找附件
+    const findAttachments=(part)=>{
+      if(!part)return;
+      if(part.filename&&part.filename.length>0&&part.body?.attachmentId){
+        attachments.push({filename:part.filename,attachmentId:part.body.attachmentId,mimeType:part.mimeType||'application/octet-stream'});
+      }
+      if(part.parts)part.parts.forEach(p=>findAttachments(p));
+    };
+    findAttachments(fullMsg.payload);
 
-  let ok=0;
-  for(const m of targets){
-    try{
-      const raw=makeEmail(m.email,finalSubject,emailHtml);
-      await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',body:JSON.stringify({raw})});
-      ok++;
-    }catch(e){}
+    // 下載附件資料
+    for(let att of attachments){
+      try{
+        const attData = await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msgId}/attachments/${att.attachmentId}`);
+        att.data = attData.data; // base64url
+      }catch(e){ att.data=null; }
+    }
+  }catch(e){ originalBody='<p>（無法載入原始內容）</p>'; }
+
+  const bodyHtml=`<div style="font-family:'Noto Sans TC',Arial,sans-serif;font-size:14px;color:#333;line-height:1.8;"><p>各位會員好：</p><p>如標題附件，請參考，謝謝。</p><hr style="border:none;border-top:1px solid #ddd;margin:16px 0;">${originalBody}<hr style="border:none;border-top:1px solid #ddd;margin:16px 0;"><p style="color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></p></div>`;
+
+  // 用 BCC 一次發給所有會員
+  const bccEmails = targets.map(m=>m.email).join(',');
+  showToast('發送中...');
+  try{
+    const raw = makeEmailWithAttachments(userEmail, bccEmails, finalSubject, bodyHtml, attachments);
+    await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',body:JSON.stringify({raw})});
+    showToast(`✅ 已用 BCC 轉發給${groupName}！附件 ${attachments.length} 個`);
+  }catch(e){
+    showToast('❌ 發送失敗，請重試');
+    console.error(e);
   }
-  showToast(`✅ 已轉發給${groupName} ${ok} 人！`);
+}
+
+function makeEmailWithAttachments(from, bcc, subject, htmlBody, attachments) {
+  const boundary = 'boundary_' + Date.now();
+  const subjectEncoded = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
+
+  let mime = [
+    'From: ' + from,
+    'Bcc: ' + bcc,
+    'Subject: ' + subjectEncoded,
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/mixed; boundary="' + boundary + '"',
+    '',
+    '--' + boundary,
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    btoa(unescape(encodeURIComponent(htmlBody))),
+  ].join('\r\n');
+
+  // 加入附件
+  for(const att of attachments){
+    if(!att.data)continue;
+    const attData = att.data.replace(/-/g,'+').replace(/_/g,'/');
+    const filename = '=?UTF-8?B?'+btoa(unescape(encodeURIComponent(att.filename)))+'?=';
+    mime += '\r\n--' + boundary + '\r\n';
+    mime += 'Content-Type: ' + att.mimeType + '; name="' + filename + '"\r\n';
+    mime += 'Content-Transfer-Encoding: base64\r\n';
+    mime += 'Content-Disposition: attachment; filename="' + filename + '"\r\n\r\n';
+    mime += attData;
+  }
+  mime += '\r\n--' + boundary + '--';
+
+  return btoa(unescape(encodeURIComponent(mime))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 
 // ── REPLY DRAFT ──
