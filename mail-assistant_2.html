@@ -673,12 +673,13 @@ function renderMailCard(msg,subject,from,date,type) {
   let actions = '';
   if(type==='course') {
     actions = `
-      <button class="btn-sm btn-yellow" onclick="confirmForward('${msg.id}','${esc(subject).replace(/'/g,"\\'")}','general')">📢 轉發會員</button>
+      <button class="btn-sm btn-yellow" onclick="fwdById('${msg.id}','general')">👥 會員</button>
+      <button class="btn-sm btn-purple" onclick="fwdById('${msg.id}','assoc')">🏢 公會</button>
       <button class="btn-sm btn-ghost" onclick="markRead('${msg.id}',this)">已讀</button>
       <button class="btn-sm btn-danger" onclick="trashMail('${msg.id}',this)">🗑</button>`;
   } else if(type==='board') {
     actions = `
-      <button class="btn-sm btn-purple" onclick="confirmForward('${msg.id}','${esc(subject).replace(/'/g,"\\'")}','board')">🏛 轉發理監事</button>
+      <button class="btn-sm btn-purple" onclick="fwdById('${msg.id}','board')">🏛 轉發理監事</button>
       <button class="btn-sm btn-ghost" onclick="markRead('${msg.id}',this)">已讀</button>
       <button class="btn-sm btn-danger" onclick="trashMail('${msg.id}',this)">🗑</button>`;
   } else if(type==='action') {
@@ -726,6 +727,12 @@ async function trashMail(id,btn){
 
 // ── FORWARD ──
 let pendingFwdId='', pendingFwdSubject='';
+
+function fwdById(msgId, group) {
+  const el = document.getElementById('card_' + msgId);
+  const subject = el ? (el._mailData?.subject || '') : '';
+  confirmForward(msgId, subject, group);
+}
 
 function confirmForward(msgId, subject, defaultGroup){
   pendingFwdId = msgId;
