@@ -641,11 +641,17 @@ function renderMailCard(msg,subject,from,date,type) {
       <button class="btn-sm btn-ghost" onclick="markRead('${msg.id}',this)">已讀</button>
       <button class="btn-sm btn-danger" onclick="trashMail('${msg.id}',this)">🗑</button>`;
   }
-  return `<div class="mail-card type-${type}">
-    <div class="mail-top" onclick="openMailDetail('${msg.id}','${esc(subject).replace(/'/g,"\\'").replace(/`/g,"\\`")}','${esc(sender).replace(/'/g,"\\'").replace(/`/g,"\\`")}')" style="cursor:pointer">
+  // 用 data attribute 避免字串跳脫問題
+  const cardId = 'card_' + msg.id;
+  setTimeout(()=>{
+    const el = document.getElementById(cardId);
+    if(el) el._mailData = {id:msg.id, subject, sender};
+  }, 0);
+  return `<div class="mail-card type-${type}" id="${cardId}">
+    <div class="mail-top" onclick="openMailDetailById('${msg.id}')" style="cursor:pointer">
       <div class="mail-sender">${esc(sender.substring(0,22))}</div><div class="mail-date">${date} ›</div>
     </div>
-    <div class="mail-subject" onclick="openMailDetail('${msg.id}','${esc(subject).replace(/'/g,"\\'").replace(/`/g,"\\`")}','${esc(sender).replace(/'/g,"\\'").replace(/`/g,"\\`")}')" style="cursor:pointer">${esc(subject.substring(0,52))}</div>
+    <div class="mail-subject" onclick="openMailDetailById('${msg.id}')" style="cursor:pointer">${esc(subject.substring(0,52))}</div>
     <div class="mail-snippet">${esc((msg.snippet||'').substring(0,60))}</div>
     <div class="mail-tags"><span class="tag ${info.color}">${info.label}</span></div>
     <div class="mail-actions">${actions}</div>
@@ -940,6 +946,12 @@ function openModal(title,body,confirmText,action){
   document.getElementById('modal').classList.add('open');
 }
 // ── MAIL DETAIL ──
+function openMailDetailById(msgId) {
+  const el = document.getElementById('card_' + msgId);
+  const data = el ? el._mailData : {};
+  openMailDetail(msgId, data.subject||'', data.sender||'');
+}
+
 async function openMailDetail(msgId, subject, sender) {
   // 顯示 loading
   document.getElementById('detail-modal-title').textContent = subject || '（無主旨）';
