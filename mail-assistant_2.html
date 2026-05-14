@@ -1588,17 +1588,31 @@ async function previewDraft(draftId, subject) {
 async function sendDraft(draftId, btn) {
   btn.textContent = '寄出中...'; btn.disabled = true;
   try {
-    await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts/send', {
+    const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/drafts/send', {
       method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + accessToken,
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ id: draftId })
     });
+    const data = await res.json();
+    if(!res.ok) {
+      const errMsg = data?.error?.message || res.status;
+      showToast('❌ 寄出失敗：' + errMsg);
+      btn.textContent = '📤 寄出';
+      btn.disabled = false;
+      console.error('sendDraft 錯誤：', data);
+      return;
+    }
     btn.closest('.mail-card').style.opacity = '0.4';
     showToast('✅ 信件已寄出！');
     setTimeout(loadDrafts, 1500);
   } catch(e) {
     btn.textContent = '📤 寄出';
     btn.disabled = false;
-    showToast('❌ 寄出失敗，請重試');
+    showToast('❌ 寄出失敗：' + e.message);
+    console.error(e);
   }
 }
 
