@@ -219,6 +219,7 @@
   <div class="tabs">
     <button class="tab active" onclick="switchTab('inbox');setNav('inbox')">未讀 <span class="count" id="tab-inbox-count">...</span></button>
     <button class="tab" onclick="switchTab('all');setNav('all');initAllTab()">全部</button>
+    <button class="tab" onclick="switchTab('drafts');setNav('drafts');loadDrafts()">草稿 <span class="count" id="tab-drafts-count">-</span></button>
     <button class="tab" onclick="switchTab('compose');setNav('compose')">撰寫</button>
     <button class="tab" onclick="switchTab('members');setNav('members')">會員</button>
     <button class="tab" onclick="switchTab('settings');setNav('settings')">設定</button>
@@ -1452,7 +1453,7 @@ async function loadDrafts() {
     });
     const data = await res.json();
     const drafts = data.drafts || [];
-    document.getElementById('tab-drafts-count').textContent = drafts.length;
+    const countEl = document.getElementById('tab-drafts-count'); if(countEl) countEl.textContent = drafts.length;
 
     if(!drafts.length) {
       contentEl.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div>沒有草稿</div>';
