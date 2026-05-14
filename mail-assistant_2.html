@@ -1387,11 +1387,44 @@ function closeDetailModal() {
 }
 
 // ── DRAFTS ──
+function reAuthAndLoadDrafts() {
+  // 強制重新取得有草稿權限的 token
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    prompt: 'consent',
+    callback: async (resp) => {
+      if(resp.error){ showToast('❌ 授權失敗：' + resp.error); return; }
+      accessToken = resp.access_token;
+      showToast('✅ 重新授權成功！');
+      loadDrafts();
+    }
+  });
+  client.requestAccessToken();
+}
+
 async function loadDrafts() {
   document.getElementById('drafts-loading').style.display = 'flex';
   document.getElementById('drafts-content').innerHTML = '';
   try {
-    const data = await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts?maxResults=20');
+    const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/drafts?maxResults=20', {
+      headers: { 'Authorization': 'Bearer ' + accessToken }
+    });
+    if(!res.ok) {
+      const err = await res.json();
+      const errMsg = err?.error?.message || res.status;
+      document.getElementById('drafts-content').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🔐</div>
+          草稿載入失敗（${errMsg}）<br>
+          <span style="font-size:12px;color:var(--text3);">錯誤代碼：${res.status}</span>
+          <br><br>
+          <button onclick="reAuthAndLoadDrafts()" style="padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">🔑 重新授權</button>
+        </div>`;
+      document.getElementById('drafts-loading').style.display = 'none';
+      return;
+    }
+    const data = await res.json();
     const drafts = data.drafts || [];
     document.getElementById('tab-drafts-count').textContent = drafts.length;
     if(!drafts.length) {
