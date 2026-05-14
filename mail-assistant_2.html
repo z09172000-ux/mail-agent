@@ -170,6 +170,10 @@
   .btn-cancel{background:var(--surface2);color:var(--text2);}
 
   .empty-state{text-align:center;padding:40px 20px;color:var(--text3);font-size:14px;line-height:1.8;}
+  .prefix-btn{padding:5px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;transition:all .2s;}
+  .prefix-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .subject-chip{padding:6px 12px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;border:1.5px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-family:inherit;transition:all .2s;text-align:left;width:100%;margin-bottom:5px;display:block;}
+  .subject-chip:active{transform:scale(.98);background:var(--surface);}
   .empty-icon{font-size:36px;margin-bottom:10px;}
 
   .type-badge{display:inline-block;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:10px;}
@@ -286,7 +290,16 @@
         </div>
         <div class="input-row">
           <div class="input-label">主旨</div>
-          <input class="input-field" id="custom-subject" type="text" placeholder="主旨">
+          <input class="input-field" id="custom-subject" type="text" placeholder="輸入或點下方常用句子" style="margin-bottom:6px;">
+          <div id="subject-chips-wrap" style="display:none;">
+            <button class="subject-chip" onclick="setSubject('轉知全聯會公文　件')">📄 轉知全聯會公文＿件</button>
+            <button class="subject-chip" onclick="setSubject('本會第　屆第　次理監事聯席會開會通知單')">🏛 本會第＿屆第＿次理監事聯席會開會通知單</button>
+            <button class="subject-chip" onclick="setSubject('檢附本會　年度繳費通知')">💰 檢附本會＿年度繳費通知</button>
+            <button class="subject-chip" onclick="setSubject('課程輔知：')">📢 課程輔知：</button>
+            <button class="subject-chip" onclick="setSubject('訊息輔知：')">📣 訊息輔知：</button>
+            <button class="subject-chip" onclick="setSubject('重要通知：')">❗ 重要通知：</button>
+          </div>
+          <button onclick="toggleSubjectChips()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;padding:2px 0;font-family:inherit;">📋 常用主旨句子</button>
         </div>
         <div class="input-row">
           <div class="input-label">內容</div>
@@ -375,8 +388,15 @@
         </div>
         <div class="settings-row">
           <div class="settings-icon">📝</div>
-          <div class="settings-info"><div class="settings-label">自動加上【轉發】前綴</div></div>
-          <div class="toggle on" id="toggle-prefix" onclick="this.classList.toggle('on')"></div>
+          <div class="settings-info">
+            <div class="settings-label">轉發前綴</div>
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px;">
+              <button class="prefix-btn active" id="prefix-course" onclick="selectPrefix('【課程轉知】',this)">【課程轉知】</button>
+              <button class="prefix-btn" id="prefix-msg" onclick="selectPrefix('【訊息轉知】',this)">【訊息轉知】</button>
+              <button class="prefix-btn" id="prefix-fwd" onclick="selectPrefix('【轉發】',this)">【轉發】</button>
+              <button class="prefix-btn" id="prefix-none" onclick="selectPrefix('',this)">不加前綴</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -845,8 +865,7 @@ async function submitForward(){
 
 async function doForward(msgId,subject,targets,groupName){
   showToast('準備中，取得附件...');
-  const usePrefix = document.getElementById('toggle-prefix').classList.contains('on');
-  const finalSubject = (usePrefix?'【轉發】':'')+subject;
+  const finalSubject = currentPrefix + subject;
 
   // 取得完整信件含附件
   let originalBody='', attachments=[];
@@ -1004,6 +1023,26 @@ async function createMeetingDraft() {
 }
 
 let signatureEnabled = true;
+let currentPrefix = '【課程轉知】';
+
+function selectPrefix(prefix, btn) {
+  currentPrefix = prefix;
+  document.querySelectorAll('.prefix-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function setSubject(text) {
+  document.getElementById('custom-subject').value = text;
+  // 游標移到底部方便繼續編輯
+  const input = document.getElementById('custom-subject');
+  input.focus();
+  input.setSelectionRange(text.length, text.length);
+}
+
+function toggleSubjectChips() {
+  const wrap = document.getElementById('subject-chips-wrap');
+  wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+}
 
 function toggleSignaturePreview() {
   signatureEnabled = !signatureEnabled;
@@ -1327,7 +1366,17 @@ async function loadDrafts() {
       gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${d.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=To&metadataHeaders=Bcc&metadataHeaders=Date`)
     ));
     renderDrafts(details);
-  } catch(e) { showToast('❌ 載入草稿失敗'); }
+  } catch(e) {
+    showToast('❌ 載入草稿失敗，請重新登入');
+    document.getElementById('drafts-content').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🔐</div>
+        草稿載入失敗<br>
+        <span style="font-size:12px;">請重新登出再登入，授權完整 Gmail 權限</span>
+        <br><br>
+        <button onclick="confirmLogout()" style="padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">重新登入</button>
+      </div>`;
+  }
   document.getElementById('drafts-loading').style.display = 'none';
 }
 
