@@ -5,7 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>郵件助手</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+function onGsiLoad() {
+  const btn = document.getElementById('login-btn');
+  if(btn) btn.disabled = false;
+}
+</script>
+<script src="https://accounts.google.com/gsi/client" async defer onload="onGsiLoad()"></script>
 <style>
   :root {
     --bg:#0f1117;--surface:#1a1d27;--surface2:#222638;--border:#2e3248;
@@ -26,6 +32,7 @@
   .login-feature{display:flex;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;color:var(--text2);}
   .login-feature:last-child{border-bottom:none;}
   .btn-google{width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s;}
+  .btn-google:disabled{opacity:0.6;cursor:not-allowed;}
   .btn-google:active{transform:scale(.97);}
   .login-note{font-size:11px;color:var(--text3);margin-top:10px;text-align:center;}
 
@@ -200,7 +207,7 @@
     <div class="login-feature"><span>✍️</span> 回覆草稿自動建立</div>
     <div class="login-feature"><span>📋</span> 開會通知範本</div>
   </div>
-  <button class="btn-google" onclick="startLogin()">🔗 使用 Gmail 帳號登入</button>
+  <button class="btn-google" id="login-btn" onclick="startLogin()">🔗 使用 Gmail 帳號登入</button>
   <div class="login-note">僅讀取、發送你授權的郵件，不儲存任何資料</div>
 </div>
 
@@ -700,6 +707,10 @@ const membersBoard = [
 
 // ── AUTH ──
 function startLogin() {
+  if(typeof google === 'undefined' || !google.accounts) {
+    showToast('⚠️ 請稍後再試，Google 服務載入中...');
+    return;
+  }
   const client = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID, scope: SCOPES,
     prompt: 'consent',
@@ -1937,4 +1948,3 @@ function closeModal(){document.getElementById('modal').classList.remove('open');
 </script>
 </body>
 </html>
-
