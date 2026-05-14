@@ -809,62 +809,120 @@ function renderInbox(messages) {
     action:'⚠️ 需手動處理',course:'📢 課程轉發',board:'🏛 理監事相關',
     archive:'📁 存查公文',system:'🔔 系統通知',other:'📨 一般信件'
   };
-  let html = '';
+  const container = document.getElementById('inbox-content');
+  container.innerHTML = '';
+  let hasContent = false;
   order.forEach(type => {
     if(!groups[type].length) return;
-    html += `<div class="sec-header"><div class="sec-title">${titles[type]}</div></div>`;
+    hasContent = true;
+    const header = document.createElement('div');
+    header.className = 'sec-header';
+    header.innerHTML = `<div class="sec-title">${titles[type]}</div>`;
+    container.appendChild(header);
     groups[type].forEach(({msg,subject,from,date,type}) => {
-      html += renderMailCard(msg,subject,from,date,type);
+      container.appendChild(renderMailCard(msg,subject,from,date,type));
     });
   });
-  if(!html) html='<div class="empty-state"><div class="empty-icon">🎉</div>沒有未讀信件！</div>';
-  document.getElementById('inbox-content').innerHTML = html;
+  if(!hasContent) container.innerHTML = '<div class="empty-state"><div class="empty-icon">🎉</div>沒有未讀信件！</div>';
 }
 
 function renderMailCard(msg,subject,from,date,type) {
-  const sender = from.replace(/<[^>]+>/,'').replace(/"/g,'').trim()||from;
+  const sender = (from||'').replace(/<[^>]+>/,'').replace(/"/g,'').trim()||from;
   const info = typeInfo(type);
-  let actions = '';
-  if(type==='course') {
-    actions = `
-      <button class="btn-sm btn-yellow" onclick="fwdById('${msg.id}','general')">👥 會員</button>
-      <button class="btn-sm btn-purple" onclick="fwdById('${msg.id}','assoc')">🏢 公會</button>
-      <button class="btn-sm btn-ghost" onclick="markRead('${msg.id}',this)">已讀</button>
-      <button class="btn-sm btn-danger" onclick="trashMail('${msg.id}',this)">🗑</button>`;
-  } else if(type==='board') {
-    actions = `
-      <button class="btn-sm btn-purple" onclick="fwdById('${msg.id}','board')">🏛 轉發理監事</button>
-      <button class="btn-sm btn-ghost" onclick="markRead('${msg.id}',this)">已讀</button>
-      <button class="btn-sm btn-danger" onclick="trashMail('${msg.id}',this)">🗑</button>`;
-  } else if(type==='action') {
-    actions = `
-      <button class="btn-sm btn-primary" onclick="openReplyDraft('${msg.id}','${esc(subject).replace(/'/g,"\\'")}','${esc(sender).replace(/'/g,"\\'")}','${esc(from).replace(/'/g,"\\'")}')">✍️ 建立回覆草稿</button>
-      <button class="btn-sm btn-ghost" onclick="markRead('${msg.id}',this)">已讀</button>`;
-  } else if(type==='archive') {
-    actions = `
-      <button class="btn-sm btn-ghost" onclick="markRead('${msg.id}',this)">✅ 存查</button>
-      <button class="btn-sm btn-danger" onclick="trashMail('${msg.id}',this)">🗑</button>`;
+  const safeId = msg.id||'';
+  const safeTid = msg.threadId||'';
+
+  const card = document.createElement('div');
+  card.className = 'mail-card type-' + type;
+  card.id = 'card_' + safeId;
+  card._mailData = {id: safeId, subject, sender, threadId: safeTid};
+
+  // 主旨和內容用 DOM 建立
+  const topDiv = document.createElement('div');
+  topDiv.className = 'mail-top';
+  topDiv.style.cursor = 'pointer';
+  topDiv.onclick = () => openMailDetailById(safeId);
+  const senderEl = document.createElement('div');
+  senderEl.className = 'mail-sender';
+  senderEl.textContent = sender.substring(0,22);
+  const dateEl = document.createElement('div');
+  dateEl.className = 'mail-date';
+  dateEl.textContent = (date||'') + ' ›';
+  topDiv.appendChild(senderEl);
+  topDiv.appendChild(dateEl);
+
+  const subjectEl = document.createElement('div');
+  subjectEl.className = 'mail-subject';
+  subjectEl.style.cursor = 'pointer';
+  subjectEl.textContent = (subject||'（無主旨）').substring(0,52);
+  subjectEl.onclick = () => openMailDetailById(safeId);
+
+  const snippetEl = document.createElement('div');
+  snippetEl.className = 'mail-snippet';
+  snippetEl.textContent = (msg.snippet||'').substring(0,60);
+
+  const tagsEl = document.createElement('div');
+  tagsEl.className = 'mail-tags';
+  const tagSpan = document.createElement('span');
+  tagSpan.className = 'tag ' + info.color;
+  tagSpan.textContent = info.label;
+  tagsEl.appendChild(tagSpan);
+
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'mail-actions';
+  const mkBtn = (cls, txt) => {
+    const b = document.createElement('button');
+    b.className = 'btn-sm ' + cls;
+    b.textContent = txt;
+    return b;
+  };
+
+  if(type === 'course') {
+    const b1 = mkBtn('btn-yellow', '👥 會員');
+    const b2 = mkBtn('btn-purple', '🏢 公會');
+    const b3 = mkBtn('btn-ghost', '已讀');
+    const b4 = mkBtn('btn-danger', '🗑');
+    b1.onclick = () => fwdById('general', subject||'', safeTid);
+    b2.onclick = () => fwdById('assoc', subject||'', safeTid);
+    b3.onclick = function(){ markRead(safeId, this); };
+    b4.onclick = function(){ trashMail(safeId, this); };
+    [b1,b2,b3,b4].forEach(b => actionsDiv.appendChild(b));
+  } else if(type === 'board') {
+    const b1 = mkBtn('btn-purple', '🏛 轉發理監事');
+    const b2 = mkBtn('btn-ghost', '已讀');
+    const b3 = mkBtn('btn-danger', '🗑');
+    b1.onclick = () => fwdById('board', subject||'', safeTid);
+    b2.onclick = function(){ markRead(safeId, this); };
+    b3.onclick = function(){ trashMail(safeId, this); };
+    [b1,b2,b3].forEach(b => actionsDiv.appendChild(b));
+  } else if(type === 'action') {
+    const b1 = mkBtn('btn-primary', '✍️ 回覆草稿');
+    const b2 = mkBtn('btn-ghost', '已讀');
+    b1.onclick = () => openReplyCompose(from||'', subject||'');
+    b2.onclick = function(){ markRead(safeId, this); };
+    [b1,b2].forEach(b => actionsDiv.appendChild(b));
+  } else if(type === 'archive') {
+    const b1 = mkBtn('btn-ghost', '✅ 存查');
+    const b2 = mkBtn('btn-danger', '🗑');
+    b1.onclick = function(){ markRead(safeId, this); };
+    b2.onclick = function(){ trashMail(safeId, this); };
+    [b1,b2].forEach(b => actionsDiv.appendChild(b));
   } else {
-    actions = `
-      <button class="btn-sm btn-ghost" onclick="markRead('${msg.id}',this)">已讀</button>
-      <button class="btn-sm btn-danger" onclick="trashMail('${msg.id}',this)">🗑</button>`;
+    const b1 = mkBtn('btn-ghost', '已讀');
+    const b2 = mkBtn('btn-danger', '🗑');
+    b1.onclick = function(){ markRead(safeId, this); };
+    b2.onclick = function(){ trashMail(safeId, this); };
+    [b1,b2].forEach(b => actionsDiv.appendChild(b));
   }
-  // 用 data attribute 避免字串跳脫問題
-  const cardId = 'card_' + msg.id;
-  setTimeout(()=>{
-    const el = document.getElementById(cardId);
-    if(el) el._mailData = {id:msg.id, subject, sender};
-  }, 0);
-  return `<div class="mail-card type-${type}" id="${cardId}">
-    <div class="mail-top" onclick="openMailDetailById('${msg.id}')" style="cursor:pointer">
-      <div class="mail-sender">${esc(sender.substring(0,22))}</div><div class="mail-date">${date} ›</div>
-    </div>
-    <div class="mail-subject" onclick="openMailDetailById('${msg.id}')" style="cursor:pointer">${esc(subject.substring(0,52))}</div>
-    <div class="mail-snippet">${esc((msg.snippet||'').substring(0,60))}</div>
-    <div class="mail-tags"><span class="tag ${info.color}">${info.label}</span></div>
-    <div class="mail-actions">${actions}</div>
-  </div>`;
+
+  card.appendChild(topDiv);
+  card.appendChild(subjectEl);
+  card.appendChild(snippetEl);
+  card.appendChild(tagsEl);
+  card.appendChild(actionsDiv);
+  return card;
 }
+
 
 async function markRead(id,btn){
   btn.textContent='...';btn.disabled=true;
@@ -1261,15 +1319,19 @@ async function initAllTab(){
 
 function renderAllEmails(messages){
   const c=document.getElementById('all-content');
-  if(!messages.length){c.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>沒有信件</div>';return;}
-  c.innerHTML=messages.map(msg=>{
+  if(!messages||!messages.length){c.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>沒有信件</div>';return;}
+  c.innerHTML='';
+  messages.forEach(function(msg){
     const subject=getHeader(msg,'Subject')||'（無主旨）';
     const from=getHeader(msg,'From')||'';
     const date=formatDate(getHeader(msg,'Date'));
     const type=classifyEmail(subject,from);
     const isUnread=msg.labelIds?.includes('UNREAD');
-    return`<div style="${isUnread?'':'opacity:0.65'}">${renderMailCard(msg,subject,from,date,type)}</div>`;
-  }).join('');
+    const wrapper=document.createElement('div');
+    if(!isUnread) wrapper.style.opacity='0.65';
+    wrapper.appendChild(renderMailCard(msg,subject,from,date,type));
+    c.appendChild(wrapper);
+  });
 }
 
 let searchTimer;
@@ -1531,8 +1593,8 @@ async function saveEditDraft() {
   if(!to) { showToast('⚠️ 請填寫收件人'); return; }
 
   const sig = signatureEnabled ? `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #ddd;color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></div>` : '';
-  const htmlBody = `<div style="font-family:'Noto Sans TC',sans-serif;font-size:14px;line-height:1.8;">${body.replace(/
-/g,'<br>')}${sig}</div>`;
+  const htmlBody = '<div style="font-family:Noto Sans TC,sans-serif;font-size:14px;line-height:1.8;">' + body.replace(/\n/g,'<br>') + sig + '</div>';
+
 
   // 讀取新附件
   const attachInput = document.getElementById('edit-draft-attach');
