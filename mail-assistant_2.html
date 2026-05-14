@@ -1440,56 +1440,77 @@ function reAuthAndLoadDrafts() {
 }
 
 async function loadDrafts() {
-  document.getElementById('drafts-loading').style.display = 'flex';
-  document.getElementById('drafts-content').innerHTML = '';
+  const loadEl = document.getElementById('drafts-loading');
+  const contentEl = document.getElementById('drafts-content');
+  loadEl.style.display = 'flex';
+  contentEl.innerHTML = '';
+
   try {
-    const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/drafts?maxResults=20', {
+    // 第一步：取得草稿清單
+    const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/drafts?maxResults=15', {
       headers: { 'Authorization': 'Bearer ' + accessToken }
     });
-    if(!res.ok) {
-      const err = await res.json();
-      const errMsg = err?.error?.message || res.status;
-      document.getElementById('drafts-content').innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">🔐</div>
-          草稿載入失敗（${errMsg}）<br>
-          <span style="font-size:12px;color:var(--text3);">錯誤代碼：${res.status}</span>
-          <br><br>
-          <button onclick="reAuthAndLoadDrafts()" style="padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">🔑 重新授權</button>
-        </div>`;
-      document.getElementById('drafts-loading').style.display = 'none';
-      return;
-    }
     const data = await res.json();
     const drafts = data.drafts || [];
     document.getElementById('tab-drafts-count').textContent = drafts.length;
+
     if(!drafts.length) {
-      document.getElementById('drafts-content').innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div>沒有草稿</div>';
-      document.getElementById('drafts-loading').style.display = 'none';
+      contentEl.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div>沒有草稿</div>';
+      loadEl.style.display = 'none';
       return;
     }
-    // 取得每封草稿詳細資訊
-    const details = await Promise.all(drafts.slice(0,15).map(async d=>{
-      const r = await fetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${d.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=To&metadataHeaders=Bcc&metadataHeaders=Date`, {
-        headers: { 'Authorization': 'Bearer ' + accessToken }
-      });
-      return r.json();
-    }));
-    renderDrafts(details);
+
+    // 第二步：逐一取得草稿詳細資料並立即渲染
+    contentEl.innerHTML = '';
+    loadEl.style.display = 'none';
+
+    for(const d of drafts) {
+      try {
+        const r2 = await fetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${d.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=To&metadataHeaders=Bcc&metadataHeaders=Date`, {
+          headers: { 'Authorization': 'Bearer ' + accessToken }
+        });
+        const detail = await r2.json();
+        const msg = detail.message || {};
+        const subject = getHeader(msg,'Subject') || '（無主旨）';
+        const to = getHeader(msg,'To') || '';
+        const bcc = getHeader(msg,'Bcc') || '';
+        const date = formatDate(getHeader(msg,'Date'));
+        const recipientCount = bcc ? bcc.split(',').length : (to ? to.split(',').length : 0);
+        const recipients = to || bcc || '（無收件人）';
+
+        const card = document.createElement('div');
+        card.className = 'mail-card';
+        card.style.cssText = 'border-left:3px solid var(--yellow);';
+        card.innerHTML = `
+          <div class="mail-top">
+            <div class="mail-sender" style="color:var(--yellow);">📝 草稿</div>
+            <div class="mail-date">${date}</div>
+          </div>
+          <div class="mail-subject">${esc(subject.substring(0,52))}</div>
+          <div class="mail-snippet" style="color:var(--text2);">
+            收件人：${recipientCount > 1 ? recipientCount+'位（BCC）' : esc(recipients.substring(0,40))}
+          </div>
+          <div class="mail-actions">
+            <button class="btn-sm btn-primary">👁 預覽</button>
+            <button class="btn-sm btn-yellow">📤 寄出</button>
+            <button class="btn-sm btn-danger">🗑 刪除</button>
+          </div>`;
+
+        card.querySelector('.btn-primary').onclick = () => previewDraft(d.id, subject);
+        card.querySelector('.btn-yellow').onclick = function(){ sendDraft(d.id, this); };
+        card.querySelector('.btn-danger').onclick = function(){ deleteDraft(d.id, this); };
+        contentEl.appendChild(card);
+      } catch(e2) {
+        console.error('草稿詳細讀取失敗：', d.id, e2);
+      }
+    }
   } catch(e) {
-    showToast('❌ 載入草稿失敗：' + e.message);
+    loadEl.style.display = 'none';
+    contentEl.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>載入失敗：${e.message}</div>`;
     console.error(e);
-    document.getElementById('drafts-content').innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">🔐</div>
-        草稿載入失敗<br>
-        <span style="font-size:12px;">請重新登出再登入，授權完整 Gmail 權限</span>
-        <br><br>
-        <button onclick="confirmLogout()" style="padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">重新登入</button>
-      </div>`;
   }
-  document.getElementById('drafts-loading').style.display = 'none';
 }
+
 
 function renderDrafts(drafts) {
   const c = document.getElementById('drafts-content');
