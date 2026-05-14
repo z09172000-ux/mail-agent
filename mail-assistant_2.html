@@ -261,8 +261,8 @@
       <div class="compose-card">
         <div class="compose-title">🏛 理監事開會通知</div>
         <div class="input-row">
-          <div class="input-label">第幾次</div>
-          <input class="input-field" id="meeting-count" type="text" placeholder="例如：10">
+          <div class="input-label">主旨（可直接修改）</div>
+          <input class="input-field" id="meeting-subject" type="text" value="本會第　屆第　次理監事聯席會開會通知單" placeholder="主旨">
         </div>
         <div class="input-row">
           <div class="input-label">會議方式</div>
@@ -281,31 +281,65 @@
       <!-- 自訂草稿 -->
       <div class="compose-card">
         <div class="compose-title">✍️ 自訂草稿</div>
+
         <div class="input-row">
           <div class="input-label">收件人</div>
           <div style="display:flex;gap:6px;">
-            <input class="input-field" id="custom-to" type="email" placeholder="email@example.com" style="flex:1;">
-            <button onclick="openPickerForCompose()" style="padding:9px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit;">👥 選會員</button>
+            <input class="input-field" id="custom-to" type="text" placeholder="email（多人用逗號分隔）" style="flex:1;margin-bottom:0;">
+            <button onclick="openPickerForCompose()" style="flex-shrink:0;padding:9px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit;">👥 選會員</button>
           </div>
         </div>
+
         <div class="input-row">
           <div class="input-label">主旨</div>
           <input class="input-field" id="custom-subject" type="text" placeholder="輸入或點下方常用句子" style="margin-bottom:6px;">
-          <div id="subject-chips-wrap" style="display:none;">
-            <button class="subject-chip" onclick="setSubject('轉知全聯會公文　件')">📄 轉知全聯會公文＿件</button>
-            <button class="subject-chip" onclick="setSubject('本會第　屆第　次理監事聯席會開會通知單')">🏛 本會第＿屆第＿次理監事聯席會開會通知單</button>
-            <button class="subject-chip" onclick="setSubject('檢附本會　年度繳費通知')">💰 檢附本會＿年度繳費通知</button>
-            <button class="subject-chip" onclick="setSubject('課程輔知：')">📢 課程輔知：</button>
-            <button class="subject-chip" onclick="setSubject('訊息輔知：')">📣 訊息輔知：</button>
-            <button class="subject-chip" onclick="setSubject('重要通知：')">❗ 重要通知：</button>
+          <div id="subject-chips-wrap" style="display:none;margin-bottom:6px;">
+            <button class="subject-chip" onclick="setSubject('轉知全聯會公文　件')">📄 轉知全聯會公文　件</button>
+            <button class="subject-chip" onclick="setSubject('本會第　屆第　次理監事聯席會開會通知單')">🏛 本會第　屆第　次理監事聯席會開會通知單</button>
+            <button class="subject-chip" onclick="setSubject('檢附本會　年度繳費通知')">💰 檢附本會　年度繳費通知</button>
+            <button class="subject-chip" onclick="setSubject('課程轉知：')">📢 課程轉知：</button>
+            <button class="subject-chip" onclick="setSubject('訊息轉知：')">📣 訊息轉知：</button>
           </div>
-          <button onclick="toggleSubjectChips()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;padding:2px 0;font-family:inherit;">📋 常用主旨句子</button>
+          <button onclick="toggleSubjectChips()" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;padding:2px 0;font-family:inherit;">📋 常用主旨句子 ▾</button>
         </div>
+
         <div class="input-row">
           <div class="input-label">內容</div>
-          <textarea class="compose-textarea" id="custom-body" placeholder="在此輸入信件內容..."></textarea>
+          <textarea class="compose-textarea" id="custom-body" placeholder="在此輸入信件內容..." style="min-height:120px;"></textarea>
         </div>
-        <button class="btn-sm btn-primary" style="width:100%;padding:10px;" onclick="createCustomDraft()">📝 建立草稿到 Gmail</button>
+
+        <div class="input-row">
+          <button id="btn-signature" onclick="toggleSignaturePreview()"
+            style="width:100%;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--accent);border-radius:var(--radius-sm);color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:8px;">
+            <span>✅</span><span id="btn-signature-text">已附上公會結語（點此移除）</span>
+          </button>
+          <div id="signature-preview" style="margin-top:8px;padding:10px 12px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.8;border-left:3px solid var(--accent);">
+            社團法人澎湖縣職能治療師公會<br>
+            880澎湖縣馬公市光榮里縣府新村23號1樓<br>
+            理事長 林聖凱　總幹事 林蘭蕙<br>
+            電話：0932463513　E-mail：pehotu.office@gmail.com
+          </div>
+        </div>
+
+        <div class="input-row">
+          <div class="input-label">附件（可選）</div>
+          <label for="custom-attach" style="display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--surface2);border:1.5px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;">
+            <span style="font-size:20px;">📎</span>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:600;color:var(--accent);">選擇檔案或照片</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px;" id="attach-label">支援 PDF、圖片、文件等</div>
+            </div>
+            <span style="color:var(--text3);">›</span>
+          </label>
+          <input type="file" id="custom-attach" multiple style="display:none" onchange="onAttachChange(this)">
+        </div>
+
+        <div class="input-row">
+          <div class="input-label">排程提醒（可選）</div>
+          <input class="input-field" id="custom-schedule" type="datetime-local">
+        </div>
+
+        <button class="btn-sm btn-primary" style="width:100%;padding:12px;" onclick="createCustomDraft()">📝 建立草稿到 Gmail</button>
       </div>
     </div>
   </div>
@@ -607,6 +641,7 @@ const membersBoard = [
 function startLogin() {
   const client = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID, scope: SCOPES,
+    prompt: 'consent',
     callback: async (resp) => {
       if (resp.error) { showToast('❌ 登入失敗：' + resp.error); return; }
       accessToken = resp.access_token;
@@ -999,13 +1034,13 @@ function closeReplyModal() {
 
 // ── MEETING DRAFT ──
 async function createMeetingDraft() {
-  const count = document.getElementById('meeting-count').value.trim();
+  const meetingSubject = document.getElementById('meeting-subject').value.trim();
   const type = document.getElementById('meeting-type').value;
-  if(!count){ showToast('⚠️ 請填寫第幾次'); return; }
+  if(!meetingSubject){ showToast('⚠️ 請填寫主旨'); return; }
 
-  const body = `敬愛的各位理監事與幹部晚安：\n依據本會章程第33條略以：理事會、監事會每三個月開一次...。召開本會第二屆第${count}次理監事聯席會議。開會通知單及議程列於附件供參，謝謝大家。\n\nPS：本次會議為${type}會議，地點於林淑惠職能治療所，謝謝。`;
+  const body = `敬愛的各位理監事與幹部晚安：\n依據本會章程第33條略以：理事會、監事會每三個月開一次...。召開${meetingSubject}。開會通知單及議程列於附件供參，謝謝大家。\n\nPS：本次會議為${type}會議，地點於林淑惠職能治療所，謝謝。`;
 
-  const subject = `本會第二屆第${count}次理監事聯席會議開會通知`;
+  const subject = meetingSubject;
   const htmlBody = body.replace(/\n/g,'<br>');
 
   // 建立給每位理監事的草稿（合併BCC方式）
@@ -1047,17 +1082,20 @@ function toggleSubjectChips() {
 function toggleSignaturePreview() {
   signatureEnabled = !signatureEnabled;
   const btn = document.getElementById('btn-signature');
+  const textEl = document.getElementById('btn-signature-text');
   const preview = document.getElementById('signature-preview');
   if(signatureEnabled) {
-    btn.textContent = '✅ 已附上公會結語（點此移除）';
+    btn.querySelector('span').textContent = '✅';
+    if(textEl) textEl.textContent = '已附上公會結語（點此移除）';
     btn.style.borderColor = 'var(--accent)';
     btn.style.color = 'var(--accent)';
-    preview.style.display = 'block';
+    if(preview) preview.style.display = 'block';
   } else {
-    btn.textContent = '☐ 不附公會結語（點此加入）';
+    btn.querySelector('span').textContent = '☐';
+    if(textEl) textEl.textContent = '不附公會結語（點此加入）';
     btn.style.borderColor = 'var(--border)';
     btn.style.color = 'var(--text3)';
-    preview.style.display = 'none';
+    if(preview) preview.style.display = 'none';
   }
 }
 
