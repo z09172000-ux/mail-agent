@@ -573,10 +573,10 @@
     <div class="input-row">
       <div class="input-label">常用句子快速插入</div>
       <div style="display:flex;flex-wrap:wrap;gap:5px;">
-        <button onclick="insertText('edit-draft-body','各位會員好：\n如標題附件，請參考，謝謝。\n')" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">各位會員好</button>
-        <button onclick="insertText('edit-draft-body','敬請查照，謝謝。')" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">敬請查照</button>
-        <button onclick="insertText('edit-draft-body','如有任何問題，請與本會聯繫，謝謝。')" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">聯繫本會</button>
-        <button onclick="insertText('edit-draft-body','煩請協助轉知，謝謝。')" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">煩請轉知</button>
+        <button id="qbtn1" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">各位會員好</button>
+        <button id="qbtn2" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">敬請查照</button>
+        <button id="qbtn3" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">聯繫本會</button>
+        <button id="qbtn4" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">煩請轉知</button>
       </div>
     </div>
     <div class="input-row">
@@ -1454,6 +1454,19 @@ async function openEditDraft(draftId, subject, to, snippet) {
   document.getElementById('edit-draft-body').value = '';
   document.getElementById('edit-attach-label').textContent = '支援 PDF、圖片、文件等';
   document.getElementById('edit-draft-modal').classList.add('open');
+  // 綁定快速句子按鈕
+  const qbtns = [
+    ['qbtn1', '各位會員好：
+如標題附件，請參考，謝謝。
+'],
+    ['qbtn2', '敬請查照，謝謝。'],
+    ['qbtn3', '如有任何問題，請與本會聯繫，謝謝。'],
+    ['qbtn4', '煩請協助轉知，謝謝。']
+  ];
+  qbtns.forEach(([id, text]) => {
+    const btn = document.getElementById(id);
+    if(btn) btn.onclick = () => insertText('edit-draft-body', text);
+  });
 
   // 嘗試載入草稿完整內容
   try {
@@ -1924,3 +1937,4 @@ function closeModal(){document.getElementById('modal').classList.remove('open');
 </script>
 </body>
 </html>
+
