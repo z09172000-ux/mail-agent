@@ -220,6 +220,7 @@
     <button class="tab active" onclick="switchTab('inbox');setNav('inbox')">未讀 <span class="count" id="tab-inbox-count">...</span></button>
     <button class="tab" onclick="switchTab('all');setNav('all');initAllTab()">全部</button>
     <button class="tab" onclick="switchTab('drafts');setNav('drafts');loadDrafts()">草稿 <span class="count" id="tab-drafts-count">-</span></button>
+    <button class="tab" onclick="switchTab('stats');setNav('stats');loadStats()">統計</button>
     <button class="tab" onclick="switchTab('compose');setNav('compose')">撰寫</button>
     <button class="tab" onclick="switchTab('members');setNav('members')">會員</button>
     <button class="tab" onclick="switchTab('settings');setNav('settings')">設定</button>
@@ -234,14 +235,20 @@
   <!-- 草稿匣 -->
   <div class="page" id="page-drafts">
     <div style="margin-top:12px">
-      <div style="display:flex;gap:6px;margin-bottom:10px;">
-        <button onclick="loadDrafts()" style="flex:1;padding:9px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">🔄 重新載入</button>
-        <button onclick="diagnoseDrafts()" style="flex:1;padding:9px;background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">🔍 診斷</button>
-        <button onclick="reAuthAndLoadDrafts()" style="flex:1;padding:9px;background:var(--surface2);color:var(--yellow);border:1.5px solid var(--yellow);border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">🔑 重新授權</button>
-      </div>
+
       <div id="drafts-loading" class="loading-wrap" style="display:none"><div class="spinner"></div><div class="loading-text">載入草稿中...</div></div>
       <div id="drafts-content">
         <div class="empty-state"><div class="empty-icon">📝</div>點上方「重新載入」</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 統計儀表板 -->
+  <div class="page" id="page-stats">
+    <div style="margin-top:12px">
+      <div id="stats-loading" class="loading-wrap" style="display:none"><div class="spinner"></div><div class="loading-text">統計中...</div></div>
+      <div id="stats-content">
+        <div class="empty-state"><div class="empty-icon">📊</div>點上方「統計」載入</div>
       </div>
     </div>
   </div>
@@ -445,9 +452,9 @@
   <div class="bottom-nav">
     <div class="nav-item active" id="nav-inbox" onclick="switchTab('inbox');setNav('inbox')"><div class="nav-icon">📥</div><div class="nav-label">未讀</div></div>
     <div class="nav-item" id="nav-drafts" onclick="switchTab('drafts');setNav('drafts');loadDrafts()"><div class="nav-icon">📝</div><div class="nav-label">草稿</div></div>
+    <div class="nav-item" id="nav-stats" onclick="switchTab('stats');setNav('stats');loadStats()"><div class="nav-icon">📊</div><div class="nav-label">統計</div></div>
     <div class="nav-item" id="nav-compose" onclick="switchTab('compose');setNav('compose')"><div class="nav-icon">✍️</div><div class="nav-label">撰寫</div></div>
     <div class="nav-item" id="nav-members" onclick="switchTab('members');setNav('members')"><div class="nav-icon">👥</div><div class="nav-label">會員</div></div>
-    <div class="nav-item" id="nav-settings" onclick="switchTab('settings');setNav('settings')"><div class="nav-icon">⚙️</div><div class="nav-label">設定</div></div>
   </div>
 </div>
 
@@ -961,6 +968,9 @@ async function doForward(msgId,subject,targets,groupName){
     const raw = makeEmailWithAttachments(userEmail, bccEmails, finalSubject, bodyHtml, attachments);
     await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts',{method:'POST',body:JSON.stringify({message:{raw}})});
     showToast(`✅ 草稿已儲存！請到草稿匣確認後寄出`);
+    // 記錄統計
+    const groupKey = targets === membersGeneral ? 'forward_general' : targets === membersBoard ? 'forward_board' : 'forward_assoc';
+    recordAction(groupKey);
     // 自動切換到草稿匣並重新載入
     setTimeout(()=>{ switchTab('drafts'); setNav('drafts'); loadDrafts(); }, 1000);
   }catch(e){
@@ -1260,7 +1270,7 @@ function switchTab(tab){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('page-'+tab).classList.add('active');
-  ['inbox','all','drafts','compose','members','settings'].forEach((t,i)=>{if(t===tab)document.querySelectorAll('.tab')[i]?.classList.add('active');});
+  ['inbox','all','drafts','stats','compose','members','settings'].forEach((t,i)=>{if(t===tab)document.querySelectorAll('.tab')[i]?.classList.add('active');});
 }
 function setNav(tab){document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('nav-'+tab)?.classList.add('active');}
 let toastTimer;
@@ -1607,6 +1617,7 @@ async function sendDraft(draftId, btn) {
     }
     btn.closest('.mail-card').style.opacity = '0.4';
     showToast('✅ 信件已寄出！');
+    recordAction('sent');
     setTimeout(loadDrafts, 1500);
   } catch(e) {
     btn.textContent = '📤 寄出';
@@ -1625,6 +1636,108 @@ async function deleteDraft(draftId, btn) {
     setTimeout(loadDrafts, 1000);
   } catch(e) { showToast('❌ 刪除失敗'); }
 }
+
+// ── STATS ──
+// 本地儲存統計資料
+function getStatsData() {
+  try {
+    return JSON.parse(localStorage.getItem('mailStats') || '{}');
+  } catch(e) { return {}; }
+}
+
+function saveStatsData(data) {
+  try { localStorage.setItem('mailStats', JSON.stringify(data)); } catch(e) {}
+}
+
+function recordAction(type) {
+  const data = getStatsData();
+  const now = new Date();
+  const monthKey = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  if(!data[monthKey]) data[monthKey] = {forward_general:0, forward_board:0, forward_assoc:0, sent:0, archived:0, replied:0};
+  if(data[monthKey][type] !== undefined) data[monthKey][type]++;
+  saveStatsData(data);
+}
+
+async function loadStats() {
+  document.getElementById('stats-loading').style.display='flex';
+  document.getElementById('stats-content').innerHTML='';
+
+  try {
+    const now = new Date();
+    const months = [];
+    // 產生最近6個月的時間範圍
+    for(let i=0; i<6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+      const after = Math.floor(d.getTime()/1000);
+      const before = Math.floor(new Date(d.getFullYear(), d.getMonth()+1, 1).getTime()/1000);
+      months.push({
+        label: d.getFullYear()+'年'+(d.getMonth()+1)+'月',
+        after, before,
+        key: d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')
+      });
+    }
+
+    // 並行查詢每月收件和寄件數量
+    const results = await Promise.all(months.map(async m => {
+      const [inbox, sent] = await Promise.all([
+        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&q=after:${m.after}+before:${m.before}&maxResults=1`, {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json()),
+        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages?labelIds=SENT&q=after:${m.after}+before:${m.before}&maxResults=1`, {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json())
+      ]);
+      return {
+        label: m.label,
+        inbox: inbox.resultSizeEstimate || 0,
+        sent: sent.resultSizeEstimate || 0
+      };
+    }));
+
+    // 取得本月轉發統計（從本地儲存）
+    const localData = getStatsData();
+    const monthKey = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+    const monthStats = localData[monthKey] || {forward_general:0,forward_board:0,forward_assoc:0,sent:0};
+    const totalForward = (monthStats.forward_general||0)+(monthStats.forward_board||0)+(monthStats.forward_assoc||0);
+
+    // 最大值（用於長度比例）
+    const maxInbox = Math.max(...results.map(r=>r.inbox), 1);
+    const maxSent = Math.max(...results.map(r=>r.sent), 1);
+
+    document.getElementById('stats-content').innerHTML = `
+      <div style="background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:14px;">📊 每月信件統計</div>
+        <div style="display:flex;justify-content:flex-end;gap:12px;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text3);">
+            <div style="width:10px;height:10px;border-radius:2px;background:var(--yellow);"></div>收件
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text3);">
+            <div style="width:10px;height:10px;border-radius:2px;background:var(--green);"></div>寄出
+          </div>
+        </div>
+        ${results.map(r => `
+          <div style="margin-bottom:10px;">
+            <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">${r.label}</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+              <div style="width:40px;font-size:11px;color:var(--text3);text-align:right;">${r.inbox}</div>
+              <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+                <div style="width:${Math.round(r.inbox/maxInbox*100)}%;height:100%;background:var(--yellow);border-radius:4px;"></div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div style="width:40px;font-size:11px;color:var(--text3);text-align:right;">${r.sent}</div>
+              <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+                <div style="width:${Math.round(r.sent/maxSent*100)}%;height:100%;background:var(--green);border-radius:4px;"></div>
+              </div>
+            </div>
+          </div>`).join('')}
+      </div>
+
+
+    `;
+  } catch(e) {
+    document.getElementById('stats-content').innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>載入失敗：'+e.message+'</div>';
+    console.error(e);
+  }
+  document.getElementById('stats-loading').style.display='none';
+}
+
 
 function closeModal(){document.getElementById('modal').classList.remove('open');}
 </script>
