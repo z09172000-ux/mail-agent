@@ -1469,12 +1469,16 @@ async function loadDrafts() {
       return;
     }
     // 取得每封草稿詳細資訊
-    const details = await Promise.all(drafts.map(d=>
-      gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${d.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=To&metadataHeaders=Bcc&metadataHeaders=Date`)
-    ));
+    const details = await Promise.all(drafts.slice(0,15).map(async d=>{
+      const r = await fetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${d.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=To&metadataHeaders=Bcc&metadataHeaders=Date`, {
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      });
+      return r.json();
+    }));
     renderDrafts(details);
   } catch(e) {
-    showToast('❌ 載入草稿失敗，請重新登入');
+    showToast('❌ 載入草稿失敗：' + e.message);
+    console.error(e);
     document.getElementById('drafts-content').innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">🔐</div>
@@ -1490,30 +1494,38 @@ async function loadDrafts() {
 function renderDrafts(drafts) {
   const c = document.getElementById('drafts-content');
   if(!drafts.length) { c.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div>沒有草稿</div>'; return; }
-  c.innerHTML = drafts.map(d => {
+  const cards = drafts.map(d => {
     const msg = d.message || {};
     const subject = getHeader(msg,'Subject') || '（無主旨）';
     const to = getHeader(msg,'To') || '';
     const bcc = getHeader(msg,'Bcc') || '';
-    const recipients = to || bcc || '（無收件人）';
     const date = formatDate(getHeader(msg,'Date'));
     const recipientCount = bcc ? bcc.split(',').length : (to ? to.split(',').length : 0);
-    return `<div class="mail-card type-info" style="border-left-color:var(--yellow)">
+    const recipients = to || bcc || '（無收件人）';
+    const cardEl = document.createElement('div');
+    cardEl.className = 'mail-card type-info';
+    cardEl.style.borderLeftColor = 'var(--yellow)';
+    cardEl._draftData = {id: d.id, subject};
+    cardEl.innerHTML = `
       <div class="mail-top">
         <div class="mail-sender" style="color:var(--yellow)">📝 草稿</div>
         <div class="mail-date">${date}</div>
       </div>
       <div class="mail-subject">${esc(subject.substring(0,52))}</div>
-      <div class="mail-snippet" style="color:var(--text2);">
-        收件人：${recipientCount > 1 ? recipientCount+'位（BCC）' : esc(recipients.substring(0,40))}
-      </div>
+      <div class="mail-snippet" style="color:var(--text2);">收件人：${recipientCount > 1 ? recipientCount+'位（BCC）' : esc(recipients.substring(0,40))}</div>
       <div class="mail-actions">
-        <button class="btn-sm btn-primary" onclick="previewDraft('${d.id}','${esc(subject).replace(/'/g,"\'")}')">👁 預覽</button>
-        <button class="btn-sm btn-yellow" onclick="sendDraft('${d.id}',this)">📤 寄出</button>
-        <button class="btn-sm btn-danger" onclick="deleteDraft('${d.id}',this)">🗑 刪除</button>
-      </div>
-    </div>`;
-  }).join('');
+        <button class="btn-sm btn-primary" data-action="preview">👁 預覽</button>
+        <button class="btn-sm btn-yellow" data-action="send">📤 寄出</button>
+        <button class="btn-sm btn-danger" data-action="delete">🗑 刪除</button>
+      </div>`;
+    // 綁定事件避免字串跳脫問題
+    cardEl.querySelector('[data-action="preview"]').onclick = () => previewDraft(d.id, subject);
+    cardEl.querySelector('[data-action="send"]').onclick = function(){ sendDraft(d.id, this); };
+    cardEl.querySelector('[data-action="delete"]').onclick = function(){ deleteDraft(d.id, this); };
+    return cardEl;
+  });
+  c.innerHTML = '';
+  cards.forEach(card => c.appendChild(card));
 }
 
 async function previewDraft(draftId, subject) {
