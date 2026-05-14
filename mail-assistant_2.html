@@ -503,7 +503,7 @@
 
 <script>
 const CLIENT_ID = '226682198972-d7s6q22h1niuek9u5te78u5br52vi820.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.compose';
+const SCOPES = 'https://mail.google.com/';
 const OT_ARCHIVE_SENDER = 'oturoc@ms64.hinet.net';
 
 let accessToken = null, userEmail = '', allEmailsCache = [], allLoaded = false;
@@ -1003,6 +1003,25 @@ async function createMeetingDraft() {
   } catch(e){ showToast('❌ 草稿建立失敗'); }
 }
 
+let signatureEnabled = true;
+
+function toggleSignaturePreview() {
+  signatureEnabled = !signatureEnabled;
+  const btn = document.getElementById('btn-signature');
+  const preview = document.getElementById('signature-preview');
+  if(signatureEnabled) {
+    btn.textContent = '✅ 已附上公會結語（點此移除）';
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.color = 'var(--accent)';
+    preview.style.display = 'block';
+  } else {
+    btn.textContent = '☐ 不附公會結語（點此加入）';
+    btn.style.borderColor = 'var(--border)';
+    btn.style.color = 'var(--text3)';
+    preview.style.display = 'none';
+  }
+}
+
 function onAttachChange(input) {
   const files = input.files;
   const label = document.getElementById('attach-label');
@@ -1045,7 +1064,7 @@ async function createCustomDraft() {
   const body = document.getElementById('custom-body').value.trim();
   if(!to){ showToast('⚠️ 請填寫收件人'); return; }
 
-  const useSignature = document.getElementById('toggle-signature').classList.contains('on');
+  const useSignature = signatureEnabled;
   const signature = useSignature ? `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #ddd;color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></div>` : '';
   const htmlBody = `<div style="font-family:'Noto Sans TC',sans-serif;font-size:14px;line-height:1.8;">${body.replace(/\n/g,'<br>')}${signature}</div>`;
 
