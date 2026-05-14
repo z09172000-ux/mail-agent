@@ -549,6 +549,54 @@
   </div>
 </div>
 
+<!-- EDIT DRAFT MODAL -->
+<div class="modal-overlay" id="edit-draft-modal" onclick="closeEditDraftModal()">
+  <div class="modal" style="max-height:92vh;overflow-y:auto;" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:16px;font-weight:700;">✏️ 編修草稿</div>
+      <button onclick="closeEditDraftModal()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;">✕</button>
+    </div>
+    <input type="hidden" id="edit-draft-id">
+    <div class="input-row">
+      <div class="input-label">收件人</div>
+      <input class="input-field" id="edit-draft-to" type="text" placeholder="收件人 Email">
+    </div>
+    <div class="input-row">
+      <div class="input-label">主旨</div>
+      <input class="input-field" id="edit-draft-subject" type="text" placeholder="主旨">
+    </div>
+    <div class="input-row">
+      <div class="input-label">內容</div>
+      <textarea class="compose-textarea" id="edit-draft-body" style="min-height:160px;" placeholder="信件內容..."></textarea>
+    </div>
+    <div class="input-row">
+      <div class="input-label">常用句子快速插入</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;">
+        <button onclick="insertText('edit-draft-body','各位會員好：\n如標題附件，請參考，謝謝。\n')" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">各位會員好</button>
+        <button onclick="insertText('edit-draft-body','敬請查照，謝謝。')" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">敬請查照</button>
+        <button onclick="insertText('edit-draft-body','如有任何問題，請與本會聯繫，謝謝。')" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">聯繫本會</button>
+        <button onclick="insertText('edit-draft-body','煩請協助轉知，謝謝。')" style="padding:5px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);cursor:pointer;font-family:inherit;">煩請轉知</button>
+      </div>
+    </div>
+    <div class="input-row">
+      <div class="input-label">新增附件（可選）</div>
+      <label for="edit-draft-attach" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border:1.5px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;">
+        <span style="font-size:18px;">📎</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;color:var(--accent);">選擇檔案或照片</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;" id="edit-attach-label">支援 PDF、圖片、文件等</div>
+        </div>
+      </label>
+      <input type="file" id="edit-draft-attach" multiple style="display:none" onchange="onEditAttachChange(this)">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-full btn-cancel" onclick="closeEditDraftModal()">取消</button>
+      <button class="btn-full btn-confirm" onclick="saveEditDraft()">💾 更新草稿</button>
+    </div>
+  </div>
+</div>
+
 <!-- DETAIL MODAL -->
 <div class="modal-overlay" id="detail-modal" onclick="closeDetailModal()">
   <div class="modal" style="max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation()">
@@ -1396,6 +1444,116 @@ async function downloadAttachment(msgId, attachmentId, filename, mimeType) {
     URL.revokeObjectURL(url);
     showToast('✅ 下載完成：' + filename);
   } catch(e) { showToast('❌ 下載失敗'); }
+}
+
+// ── EDIT DRAFT ──
+async function openEditDraft(draftId, subject, to, snippet) {
+  document.getElementById('edit-draft-id').value = draftId;
+  document.getElementById('edit-draft-subject').value = subject || '';
+  document.getElementById('edit-draft-to').value = to || '';
+  document.getElementById('edit-draft-body').value = '';
+  document.getElementById('edit-attach-label').textContent = '支援 PDF、圖片、文件等';
+  document.getElementById('edit-draft-modal').classList.add('open');
+
+  // 嘗試載入草稿完整內容
+  try {
+    const res = await fetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${draftId}?format=full`, {
+      headers: { 'Authorization': 'Bearer ' + accessToken }
+    });
+    const draft = await res.json();
+    const msg = draft.message || {};
+
+    // 取得收件人
+    const toHeader = getHeader(msg, 'To') || getHeader(msg, 'Bcc') || to;
+    document.getElementById('edit-draft-to').value = toHeader;
+
+    // 取得內文（純文字）
+    const b64decode = (data) => {
+      try {
+        const b64 = data.replace(/-/g,'+').replace(/_/g,'/');
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+        return new TextDecoder('utf-8').decode(bytes);
+      } catch(e) { return ''; }
+    };
+    const findPlain = (part) => {
+      if(!part) return '';
+      if(part.mimeType==='text/plain' && part.body?.data) return b64decode(part.body.data);
+      if(part.parts){ for(const p of part.parts){ const r=findPlain(p); if(r) return r; } }
+      return '';
+    };
+    const plainBody = findPlain(msg.payload);
+    if(plainBody) document.getElementById('edit-draft-body').value = plainBody.trim();
+  } catch(e) {
+    console.error('載入草稿內容失敗', e);
+  }
+}
+
+function insertText(fieldId, text) {
+  const field = document.getElementById(fieldId);
+  if(!field) return;
+  const start = field.selectionStart;
+  const end = field.selectionEnd;
+  const current = field.value;
+  field.value = current.substring(0, start) + text + current.substring(end);
+  field.selectionStart = field.selectionEnd = start + text.length;
+  field.focus();
+}
+
+function onEditAttachChange(input) {
+  const label = document.getElementById('edit-attach-label');
+  if(!label) return;
+  label.textContent = input.files.length ? '已選 '+input.files.length+' 個檔案' : '支援 PDF、圖片、文件等';
+}
+
+async function saveEditDraft() {
+  const draftId = document.getElementById('edit-draft-id').value;
+  const to = document.getElementById('edit-draft-to').value.trim();
+  const subject = document.getElementById('edit-draft-subject').value.trim();
+  const body = document.getElementById('edit-draft-body').value.trim();
+  if(!to) { showToast('⚠️ 請填寫收件人'); return; }
+
+  const sig = signatureEnabled ? `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #ddd;color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></div>` : '';
+  const htmlBody = `<div style="font-family:'Noto Sans TC',sans-serif;font-size:14px;line-height:1.8;">${body.replace(/
+/g,'<br>')}${sig}</div>`;
+
+  // 讀取新附件
+  const attachInput = document.getElementById('edit-draft-attach');
+  const attachments = [];
+  for(const file of (attachInput?.files || [])) {
+    const data = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result.split(',')[1]);
+      reader.readAsDataURL(file);
+    });
+    attachments.push({filename:file.name, data, mimeType:file.type||'application/octet-stream', attachmentId:null});
+  }
+
+  try {
+    // 刪除舊草稿
+    await fetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${draftId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + accessToken }
+    });
+    // 建立新草稿
+    const raw = attachments.length > 0
+      ? makeEmailWithAttachments(userEmail, to, subject, htmlBody, attachments)
+      : makeEmail(to, subject, htmlBody);
+    await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts', {
+      method: 'POST',
+      body: JSON.stringify({ message: { raw } })
+    });
+    showToast('✅ 草稿已更新！');
+    closeEditDraftModal();
+    setTimeout(loadDrafts, 800);
+  } catch(e) {
+    showToast('❌ 更新失敗：' + e.message);
+  }
+}
+
+function closeEditDraftModal() {
+  document.getElementById('edit-draft-modal').classList.remove('open');
 }
 
 function closeDetailModal() {
