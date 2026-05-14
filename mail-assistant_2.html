@@ -233,9 +233,14 @@
   <!-- 草稿匣 -->
   <div class="page" id="page-drafts">
     <div style="margin-top:12px">
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <button onclick="loadDrafts()" style="flex:1;padding:9px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">🔄 重新載入</button>
+        <button onclick="diagnoseDrafts()" style="flex:1;padding:9px;background:var(--surface2);color:var(--text2);border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">🔍 診斷</button>
+        <button onclick="reAuthAndLoadDrafts()" style="flex:1;padding:9px;background:var(--surface2);color:var(--yellow);border:1.5px solid var(--yellow);border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">🔑 重新授權</button>
+      </div>
       <div id="drafts-loading" class="loading-wrap" style="display:none"><div class="spinner"></div><div class="loading-text">載入草稿中...</div></div>
       <div id="drafts-content">
-        <div class="empty-state"><div class="empty-icon">📝</div>點上方「草稿匣」載入</div>
+        <div class="empty-state"><div class="empty-icon">📝</div>點上方「重新載入」</div>
       </div>
     </div>
   </div>
@@ -1387,6 +1392,37 @@ function closeDetailModal() {
 }
 
 // ── DRAFTS ──
+async function diagnoseDrafts() {
+  const c = document.getElementById('drafts-content');
+  c.innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div class="loading-text">診斷中...</div></div>';
+  
+  // 測試 1: 確認 token 存在
+  if(!accessToken) {
+    c.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>沒有 access token，請重新登入</div>';
+    return;
+  }
+  
+  // 測試 2: 顯示 token 前幾碼
+  const tokenPreview = accessToken.substring(0,20) + '...';
+  
+  // 測試 3: 直接呼叫 API 並顯示原始回應
+  try {
+    const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/drafts?maxResults=5', {
+      headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' }
+    });
+    const text = await res.text();
+    c.innerHTML = `<div style="padding:12px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text2);word-break:break-all;line-height:1.6;">
+      <div style="color:var(--accent);font-weight:700;margin-bottom:6px;">診斷結果</div>
+      <div>HTTP 狀態：<span style="color:${res.ok?'var(--green)':'var(--red)'}">${res.status} ${res.statusText}</span></div>
+      <div style="margin-top:6px;">Token 前段：${tokenPreview}</div>
+      <div style="margin-top:6px;">API 回應：</div>
+      <div style="margin-top:4px;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;">${text.substring(0,500)}</div>
+    </div>`;
+  } catch(e) {
+    c.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>網路錯誤：${e.message}</div>`;
+  }
+}
+
 function reAuthAndLoadDrafts() {
   // 強制重新取得有草稿權限的 token
   const client = google.accounts.oauth2.initTokenClient({
