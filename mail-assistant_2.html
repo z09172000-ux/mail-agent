@@ -226,6 +226,16 @@
     <div id="inbox-content" style="display:none;margin-top:12px"></div>
   </div>
 
+  <!-- 草稿匣 -->
+  <div class="page" id="page-drafts">
+    <div style="margin-top:12px">
+      <div id="drafts-loading" class="loading-wrap" style="display:none"><div class="spinner"></div><div class="loading-text">載入草稿中...</div></div>
+      <div id="drafts-content">
+        <div class="empty-state"><div class="empty-icon">📝</div>點上方「草稿匣」載入</div>
+      </div>
+    </div>
+  </div>
+
   <!-- 全部信件 -->
   <div class="page" id="page-all">
     <div style="margin-top:12px">
@@ -375,9 +385,9 @@
   <div class="bottom-nav">
     <div class="nav-item active" id="nav-inbox" onclick="switchTab('inbox');setNav('inbox')"><div class="nav-icon">📥</div><div class="nav-label">未讀</div></div>
     <div class="nav-item" id="nav-all" onclick="switchTab('all');setNav('all');initAllTab()"><div class="nav-icon">📋</div><div class="nav-label">全部</div></div>
+    <div class="nav-item" id="nav-drafts" onclick="switchTab('drafts');setNav('drafts');loadDrafts()"><div class="nav-icon">📝</div><div class="nav-label">草稿</div></div>
     <div class="nav-item" id="nav-compose" onclick="switchTab('compose');setNav('compose')"><div class="nav-icon">✍️</div><div class="nav-label">撰寫</div></div>
     <div class="nav-item" id="nav-members" onclick="switchTab('members');setNav('members')"><div class="nav-icon">👥</div><div class="nav-label">會員</div></div>
-    <div class="nav-item" id="nav-settings" onclick="switchTab('settings');setNav('settings')"><div class="nav-icon">⚙️</div><div class="nav-label">設定</div></div>
   </div>
 </div>
 
@@ -884,15 +894,17 @@ async function doForward(msgId,subject,targets,groupName){
 
   const bodyHtml=`<div style="font-family:'Noto Sans TC',Arial,sans-serif;font-size:14px;color:#333;line-height:1.8;"><p>各位會員好：</p><p>如標題附件，請參考，謝謝。</p><hr style="border:none;border-top:1px solid #ddd;margin:16px 0;">${originalBody}<hr style="border:none;border-top:1px solid #ddd;margin:16px 0;"><p style="color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></p></div>`;
 
-  // 用 BCC 一次發給所有會員
+  // 存成草稿（BCC），等待確認後寄出
   const bccEmails = targets.map(m=>m.email).join(',');
-  showToast('發送中...');
+  showToast('儲存草稿中...');
   try{
     const raw = makeEmailWithAttachments(userEmail, bccEmails, finalSubject, bodyHtml, attachments);
-    await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/messages/send',{method:'POST',body:JSON.stringify({raw})});
-    showToast(`✅ 已用 BCC 轉發給${groupName}！附件 ${attachments.length} 個`);
+    await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts',{method:'POST',body:JSON.stringify({message:{raw}})});
+    showToast(`✅ 草稿已儲存！請到草稿匣確認後寄出`);
+    // 自動切換到草稿匣並重新載入
+    setTimeout(()=>{ switchTab('drafts'); setNav('drafts'); loadDrafts(); }, 1000);
   }catch(e){
-    showToast('❌ 發送失敗，請重試');
+    showToast('❌ 草稿儲存失敗，請重試');
     console.error(e);
   }
 }
@@ -1118,7 +1130,7 @@ function switchTab(tab){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('page-'+tab).classList.add('active');
-  ['inbox','all','compose','members','settings'].forEach((t,i)=>{if(t===tab)document.querySelectorAll('.tab')[i]?.classList.add('active');});
+  ['inbox','all','drafts','compose','members','settings'].forEach((t,i)=>{if(t===tab)document.querySelectorAll('.tab')[i]?.classList.add('active');});
 }
 function setNav(tab){document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));document.getElementById('nav-'+tab)?.classList.add('active');}
 let toastTimer;
@@ -1248,6 +1260,119 @@ async function downloadAttachment(msgId, attachmentId, filename, mimeType) {
 
 function closeDetailModal() {
   document.getElementById('detail-modal').classList.remove('open');
+}
+
+// ── DRAFTS ──
+async function loadDrafts() {
+  document.getElementById('drafts-loading').style.display = 'flex';
+  document.getElementById('drafts-content').innerHTML = '';
+  try {
+    const data = await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts?maxResults=20');
+    const drafts = data.drafts || [];
+    document.getElementById('tab-drafts-count').textContent = drafts.length;
+    if(!drafts.length) {
+      document.getElementById('drafts-content').innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div>沒有草稿</div>';
+      document.getElementById('drafts-loading').style.display = 'none';
+      return;
+    }
+    // 取得每封草稿詳細資訊
+    const details = await Promise.all(drafts.map(d=>
+      gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${d.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=To&metadataHeaders=Bcc&metadataHeaders=Date`)
+    ));
+    renderDrafts(details);
+  } catch(e) { showToast('❌ 載入草稿失敗'); }
+  document.getElementById('drafts-loading').style.display = 'none';
+}
+
+function renderDrafts(drafts) {
+  const c = document.getElementById('drafts-content');
+  if(!drafts.length) { c.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div>沒有草稿</div>'; return; }
+  c.innerHTML = drafts.map(d => {
+    const msg = d.message || {};
+    const subject = getHeader(msg,'Subject') || '（無主旨）';
+    const to = getHeader(msg,'To') || '';
+    const bcc = getHeader(msg,'Bcc') || '';
+    const recipients = to || bcc || '（無收件人）';
+    const date = formatDate(getHeader(msg,'Date'));
+    const recipientCount = bcc ? bcc.split(',').length : (to ? to.split(',').length : 0);
+    return `<div class="mail-card type-info" style="border-left-color:var(--yellow)">
+      <div class="mail-top">
+        <div class="mail-sender" style="color:var(--yellow)">📝 草稿</div>
+        <div class="mail-date">${date}</div>
+      </div>
+      <div class="mail-subject">${esc(subject.substring(0,52))}</div>
+      <div class="mail-snippet" style="color:var(--text2);">
+        收件人：${recipientCount > 1 ? recipientCount+'位（BCC）' : esc(recipients.substring(0,40))}
+      </div>
+      <div class="mail-actions">
+        <button class="btn-sm btn-primary" onclick="previewDraft('${d.id}','${esc(subject).replace(/'/g,"\'")}')">👁 預覽</button>
+        <button class="btn-sm btn-yellow" onclick="sendDraft('${d.id}',this)">📤 寄出</button>
+        <button class="btn-sm btn-danger" onclick="deleteDraft('${d.id}',this)">🗑 刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function previewDraft(draftId, subject) {
+  document.getElementById('detail-modal-title').textContent = subject;
+  document.getElementById('detail-modal-sender').textContent = '草稿預覽';
+  document.getElementById('detail-modal-body').innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div class="loading-text">載入中...</div></div>';
+  document.getElementById('detail-modal').classList.add('open');
+  try {
+    const draft = await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${draftId}?format=full`);
+    const msg = draft.message || {};
+    const b64decode = (data) => {
+      try {
+        const b64 = data.replace(/-/g,'+').replace(/_/g,'/');
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+        return new TextDecoder('utf-8').decode(bytes);
+      } catch(e) { return ''; }
+    };
+    const findBody = (part) => {
+      if(!part) return '';
+      if(part.mimeType==='text/html' && part.body?.data) return b64decode(part.body.data);
+      if(part.mimeType==='text/plain' && part.body?.data) return '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;">'+b64decode(part.body.data)+'</pre>';
+      if(part.parts){ for(const p of part.parts){ const r=findBody(p); if(r) return r; } }
+      return '';
+    };
+    const bodyHtml = findBody(msg.payload) || '<p style="color:#888">（無內容）</p>';
+    const to = getHeader(msg,'To')||'';
+    const bcc = getHeader(msg,'Bcc')||'';
+    const recipientInfo = bcc ? `BCC ${bcc.split(',').length} 位` : to;
+    document.getElementById('detail-modal-sender').textContent = '收件人：' + recipientInfo;
+    document.getElementById('detail-modal-body').innerHTML = `<div style="font-size:13px;line-height:1.7;color:var(--text2);">${bodyHtml}</div>`;
+  } catch(e) {
+    document.getElementById('detail-modal-body').innerHTML = '<p style="color:var(--red)">❌ 無法載入草稿內容</p>';
+  }
+}
+
+async function sendDraft(draftId, btn) {
+  btn.textContent = '寄出中...'; btn.disabled = true;
+  try {
+    await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts/send', {
+      method: 'POST',
+      body: JSON.stringify({ id: draftId })
+    });
+    btn.closest('.mail-card').style.opacity = '0.4';
+    showToast('✅ 信件已寄出！');
+    setTimeout(loadDrafts, 1500);
+  } catch(e) {
+    btn.textContent = '📤 寄出';
+    btn.disabled = false;
+    showToast('❌ 寄出失敗，請重試');
+  }
+}
+
+async function deleteDraft(draftId, btn) {
+  btn.textContent = '...'; btn.disabled = true;
+  try {
+    await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${draftId}`, { method: 'DELETE' });
+    btn.closest('.mail-card').style.opacity = '0.4';
+    showToast('🗑 草稿已刪除');
+    setTimeout(loadDrafts, 1000);
+  } catch(e) { showToast('❌ 刪除失敗'); }
 }
 
 function closeModal(){document.getElementById('modal').classList.remove('open');}
