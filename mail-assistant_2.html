@@ -1677,25 +1677,41 @@ async function loadStats() {
       });
     }
 
-    // 並行查詢每月收件和寄件數量（用 after/before 日期格式）
-    const results = await Promise.all(months.map(async m => {
-      const afterDate = new Date(m.after*1000);
-      const beforeDate = new Date(m.before*1000);
-      const afterStr = afterDate.getFullYear()+'/'+(afterDate.getMonth()+1)+'/'+afterDate.getDate();
-      const beforeStr = beforeDate.getFullYear()+'/'+(beforeDate.getMonth()+1)+'/'+beforeDate.getDate();
-      const [inbox, sent] = await Promise.all([
-        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&q=after:${afterStr}+before:${beforeStr}&maxResults=500`, {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json()),
-        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages?labelIds=SENT&q=after:${afterStr}+before:${beforeStr}&maxResults=500`, {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json())
-      ]);
-      // 用實際回傳的 messages 陣列長度計算，更準確
-      const inboxCount = inbox.messages ? inbox.messages.length : (inbox.resultSizeEstimate||0);
-      const sentCount = sent.messages ? sent.messages.length : (sent.resultSizeEstimate||0);
-      return {
-        label: m.label,
-        inbox: inboxCount,
-        sent: sentCount
-      };
-    }));
+    // 逐月查詢（不並行，避免 API 限制）
+    const results = [];
+    for(const m of months) {
+      try {
+        const afterDate = new Date(m.after*1000);
+        const beforeDate = new Date(m.before*1000);
+        // Gmail API 使用 yyyy/mm/dd 格式
+        const pad = n => String(n).padStart(2,'0');
+        const afterStr = afterDate.getFullYear()+'/'+pad(afterDate.getMonth()+1)+'/'+pad(afterDate.getDate());
+        const beforeStr = beforeDate.getFullYear()+'/'+pad(beforeDate.getMonth()+1)+'/'+pad(beforeDate.getDate());
+
+        const inboxRes = await fetch(
+          `https://www.googleapis.com/gmail/v1/users/me/messages?q=in:inbox+after:${afterStr}+before:${beforeStr}&maxResults=500`,
+          {headers:{'Authorization':'Bearer '+accessToken}}
+        );
+        const inboxData = await inboxRes.json();
+
+        const sentRes = await fetch(
+          `https://www.googleapis.com/gmail/v1/users/me/messages?q=in:sent+after:${afterStr}+before:${beforeStr}&maxResults=500`,
+          {headers:{'Authorization':'Bearer '+accessToken}}
+        );
+        const sentData = await sentRes.json();
+
+        console.log(m.label, 'inbox:', inboxData, 'sent:', sentData);
+
+        results.push({
+          label: m.label,
+          inbox: inboxData.messages ? inboxData.messages.length : 0,
+          sent: sentData.messages ? sentData.messages.length : 0
+        });
+      } catch(e) {
+        console.error(m.label, e);
+        results.push({label: m.label, inbox: 0, sent: 0});
+      }
+    }
 
     // 取得本月轉發統計（從本地儲存）
     const localData = getStatsData();
