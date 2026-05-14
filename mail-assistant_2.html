@@ -1677,16 +1677,23 @@ async function loadStats() {
       });
     }
 
-    // 並行查詢每月收件和寄件數量
+    // 並行查詢每月收件和寄件數量（用 after/before 日期格式）
     const results = await Promise.all(months.map(async m => {
+      const afterDate = new Date(m.after*1000);
+      const beforeDate = new Date(m.before*1000);
+      const afterStr = afterDate.getFullYear()+'/'+(afterDate.getMonth()+1)+'/'+afterDate.getDate();
+      const beforeStr = beforeDate.getFullYear()+'/'+(beforeDate.getMonth()+1)+'/'+beforeDate.getDate();
       const [inbox, sent] = await Promise.all([
-        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&q=after:${m.after}+before:${m.before}&maxResults=1`, {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json()),
-        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages?labelIds=SENT&q=after:${m.after}+before:${m.before}&maxResults=1`, {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json())
+        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&q=after:${afterStr}+before:${beforeStr}&maxResults=500`, {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json()),
+        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages?labelIds=SENT&q=after:${afterStr}+before:${beforeStr}&maxResults=500`, {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json())
       ]);
+      // 用實際回傳的 messages 陣列長度計算，更準確
+      const inboxCount = inbox.messages ? inbox.messages.length : (inbox.resultSizeEstimate||0);
+      const sentCount = sent.messages ? sent.messages.length : (sent.resultSizeEstimate||0);
       return {
         label: m.label,
-        inbox: inbox.resultSizeEstimate || 0,
-        sent: sent.resultSizeEstimate || 0
+        inbox: inboxCount,
+        sent: sentCount
       };
     }));
 
