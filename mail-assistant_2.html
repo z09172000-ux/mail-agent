@@ -384,10 +384,10 @@
 
   <div class="bottom-nav">
     <div class="nav-item active" id="nav-inbox" onclick="switchTab('inbox');setNav('inbox')"><div class="nav-icon">📥</div><div class="nav-label">未讀</div></div>
-    <div class="nav-item" id="nav-all" onclick="switchTab('all');setNav('all');initAllTab()"><div class="nav-icon">📋</div><div class="nav-label">全部</div></div>
     <div class="nav-item" id="nav-drafts" onclick="switchTab('drafts');setNav('drafts');loadDrafts()"><div class="nav-icon">📝</div><div class="nav-label">草稿</div></div>
     <div class="nav-item" id="nav-compose" onclick="switchTab('compose');setNav('compose')"><div class="nav-icon">✍️</div><div class="nav-label">撰寫</div></div>
     <div class="nav-item" id="nav-members" onclick="switchTab('members');setNav('members')"><div class="nav-icon">👥</div><div class="nav-label">會員</div></div>
+    <div class="nav-item" id="nav-settings" onclick="switchTab('settings');setNav('settings')"><div class="nav-icon">⚙️</div><div class="nav-label">設定</div></div>
   </div>
 </div>
 
@@ -930,7 +930,10 @@ function makeEmailWithAttachments(from, bcc, subject, htmlBody, attachments) {
   // 加入附件
   for(const att of attachments){
     if(!att.data)continue;
-    const attData = att.data.replace(/-/g,'+').replace(/_/g,'/');
+    // 支援兩種格式：base64url（從 Gmail API）或 base64（從 FileReader）
+    const attData = att.attachmentId === null
+      ? att.data  // 直接來自 FileReader 的 base64
+      : att.data.replace(/-/g,'+').replace(/_/g,'/');  // 來自 Gmail API 的 base64url
     const filename = '=?UTF-8?B?'+btoa(unescape(encodeURIComponent(att.filename)))+'?=';
     mime += '\r\n--' + boundary + '\r\n';
     mime += 'Content-Type: ' + att.mimeType + '; name="' + filename + '"\r\n';
@@ -1000,6 +1003,17 @@ async function createMeetingDraft() {
   } catch(e){ showToast('❌ 草稿建立失敗'); }
 }
 
+function onAttachChange(input) {
+  const files = input.files;
+  const label = document.getElementById('attach-label');
+  if(!label) return;
+  if(files.length === 0) {
+    label.textContent = '點此選擇檔案或照片';
+  } else {
+    label.textContent = `已選 ${files.length} 個：${Array.from(files).map(f=>f.name).join(', ')}`;
+  }
+}
+
 function openPickerForCompose() {
   // 開啟選人視窗，選完後帶入收件人欄位
   document.getElementById('compose-picker-list').innerHTML =
@@ -1030,27 +1044,41 @@ async function createCustomDraft() {
   const subject = document.getElementById('custom-subject').value.trim();
   const body = document.getElementById('custom-body').value.trim();
   if(!to){ showToast('⚠️ 請填寫收件人'); return; }
-  const raw = makeEmail(to, subject, `<div style="font-family:'Noto Sans TC',sans-serif;font-size:14px;line-height:1.8;">${body.replace(/\n/g,'<br>')}</div>`);
+
+  const useSignature = document.getElementById('toggle-signature').classList.contains('on');
+  const signature = useSignature ? `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #ddd;color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></div>` : '';
+  const htmlBody = `<div style="font-family:'Noto Sans TC',sans-serif;font-size:14px;line-height:1.8;">${body.replace(/\n/g,'<br>')}${signature}</div>`;
+
+  // 讀取附件
+  const attachInput = document.getElementById('custom-attach');
+  const attachFiles = attachInput ? attachInput.files : [];
+  const attachments = [];
+  for(const file of attachFiles) {
+    const data = await new Promise((resolve)=>{
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result.split(',')[1]);
+      reader.readAsDataURL(file);
+    });
+    attachments.push({filename:file.name, data, mimeType:file.type||'application/octet-stream', attachmentId:null});
+  }
+
   try {
+    const raw = attachments.length > 0
+      ? makeEmailWithAttachments(userEmail, to, subject, htmlBody, attachments)
+      : makeEmail(to, subject, htmlBody);
     await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts',{method:'POST',body:JSON.stringify({message:{raw}})});
-    showToast('✅ 草稿已建立！請到 Gmail 草稿區查看');
+    showToast('✅ 草稿已建立！前往草稿匣確認');
     document.getElementById('custom-to').value='';
     document.getElementById('custom-subject').value='';
     document.getElementById('custom-body').value='';
-  } catch(e){ showToast('❌ 草稿建立失敗'); }
+    if(attachInput){ attachInput.value=''; document.getElementById('attach-label').textContent='點此選擇檔案或照片'; }
+    const schedule = document.getElementById('custom-schedule')?.value;
+    if(schedule) showToast(`⏰ 請記得在 ${schedule} 手動到草稿匣寄出`);
+    setTimeout(()=>{ switchTab('drafts'); setNav('drafts'); loadDrafts(); }, 1200);
+  } catch(e){ showToast('❌ 草稿建立失敗'); console.error(e); }
 }
 
-function makeEmail(to,subject,html){
-  const msg=['To: '+to,'From: '+userEmail,'Subject: =?UTF-8?B?'+btoa(unescape(encodeURIComponent(subject)))+'?=','MIME-Version: 1.0','Content-Type: text/html; charset=UTF-8','',html].join('\r\n');
-  return btoa(unescape(encodeURIComponent(msg))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-}
 
-function makeEmailBcc(to,bcc,subject,html){
-  const msg=['To: '+to,'Bcc: '+bcc,'From: '+userEmail,'Subject: =?UTF-8?B?'+btoa(unescape(encodeURIComponent(subject)))+'?=','MIME-Version: 1.0','Content-Type: text/html; charset=UTF-8','',html].join('\r\n');
-  return btoa(unescape(encodeURIComponent(msg))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-}
-
-// ── ALL EMAILS ──
 async function initAllTab(){
   if(allLoaded)return;
   document.getElementById('all-loading').style.display='flex';
