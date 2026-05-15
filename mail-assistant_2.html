@@ -236,7 +236,6 @@
   <!-- 草稿匣 -->
   <div class="page" id="page-drafts">
     <div style="margin-top:12px">
-
       <div id="drafts-loading" class="loading-wrap" style="display:none"><div class="spinner"></div><div class="loading-text">載入草稿中...</div></div>
       <div id="drafts-content">
         <div class="empty-state"><div class="empty-icon">📝</div>點上方「重新載入」</div>
@@ -258,8 +257,6 @@
               style="padding:5px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;">自訂</button>
           </div>
         </div>
-
-        <!-- 月份模式 -->
         <div id="export-mode-month" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
           <select id="export-year" style="padding:8px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-family:inherit;outline:none;"></select>
           <select id="export-month" style="padding:8px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-family:inherit;outline:none;">
@@ -269,15 +266,12 @@
             <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
           </select>
         </div>
-
-        <!-- 自訂日期模式 -->
         <div id="export-mode-custom" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
           <div style="font-size:11px;color:var(--text3);">開始</div>
           <input type="date" id="export-date-from" style="padding:7px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-family:inherit;outline:none;">
           <div style="font-size:11px;color:var(--text3);">結束</div>
           <input type="date" id="export-date-to" style="padding:7px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-family:inherit;outline:none;">
         </div>
-
         <button onclick="exportMonthlyReport()" style="padding:9px 16px;background:var(--green);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;">📥 匯出 Excel</button>
         <div id="export-status" style="font-size:12px;color:var(--text3);margin-top:6px;"></div>
       </div>
@@ -295,7 +289,7 @@
         <span class="search-icon">🔍</span>
         <input class="search-input" id="search-input" type="text" placeholder="搜尋主旨、寄件人、內容..." oninput="onSearch(this.value)">
       </div>
-      <div id="all-loading" class="loading-wrap" style="display:none"><div class="spinner"></div><div class="loading-text">載入中...</div></div>
+      <div id="all-loading" class="loading-wrap" style="display:none"></div>
       <div id="all-content"></div>
     </div>
   </div>
@@ -776,17 +770,11 @@ async function gmailFetch(url, options={}) {
 function classifyEmail(subject, from) {
   const s = subject || '';
   const f = (from || '').toLowerCase();
-  // OT全聯會寄來的理監事相關 → 存查
   if (f.includes(OT_ARCHIVE_SENDER) && keywords.board.some(k=>s.includes(k))) return 'archive';
-  // 課程類
   if (keywords.course.some(k=>s.includes(k))) return 'course';
-  // 理監事類（非全聯會）
   if (keywords.board.some(k=>s.includes(k))) return 'board';
-  // 存查公文
   if (keywords.archive.some(k=>s.includes(k))) return 'archive';
-  // 需處理
   if (keywords.action.some(k=>s.includes(k))) return 'action';
-  // 系統通知
   if (/google|microsoft|onedrive|render|github/i.test(f)) return 'system';
   return 'other';
 }
@@ -871,7 +859,6 @@ function renderMailCard(msg,subject,from,date,type) {
   card.id = 'card_' + safeId;
   card._mailData = {id: safeId, subject, sender, threadId: safeTid};
 
-  // 主旨和內容用 DOM 建立
   const topDiv = document.createElement('div');
   topDiv.className = 'mail-top';
   topDiv.style.cursor = 'pointer';
@@ -932,7 +919,8 @@ function renderMailCard(msg,subject,from,date,type) {
   } else if(type === 'action') {
     const b1 = mkBtn('btn-primary', '✍️ 回覆草稿');
     const b2 = mkBtn('btn-ghost', '已讀');
-    b1.onclick = () => openReplyCompose(from||'', subject||'');
+    // ✅ 修正：原本誤寫為 openReplyCompose，正確函式名稱為 openReplyDraft
+    b1.onclick = () => openReplyDraft(safeId, subject||'', from||'', from||'');
     b2.onclick = function(){ markRead(safeId, this); };
     [b1,b2].forEach(b => actionsDiv.appendChild(b));
   } else if(type === 'archive') {
@@ -961,7 +949,6 @@ function renderMailCard(msg,subject,from,date,type) {
   return card;
 }
 
-
 async function markRead(id,btn){
   btn.textContent='...';btn.disabled=true;
   await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${id}/modify`,{method:'POST',body:JSON.stringify({removeLabelIds:['UNREAD']})});
@@ -985,10 +972,8 @@ function fwdById(group, subject, threadId) {
 function confirmForward(msgId, subject, defaultGroup){
   pendingFwdId = msgId;
   pendingFwdSubject = subject;
-
-  // 建立勾選清單
   const allMembers = defaultGroup==='board' ? membersBoard : defaultGroup==='assoc' ? membersAssoc : membersGeneral;
-  const initChecked = defaultGroup !== 'assoc'; // 公會預設不勾選
+  const initChecked = defaultGroup !== 'assoc';
   const listHtml = allMembers.map((m,i)=>`
     <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;">
       <input type="checkbox" class="fwd-check" data-email="${m.email}" data-name="${m.name}" ${initChecked?'checked':''}
@@ -998,17 +983,13 @@ function confirmForward(msgId, subject, defaultGroup){
         <div style="font-size:11px;color:var(--text3);">${m.email}</div>
       </div>
     </label>`).join('');
-
   document.getElementById('fwd-modal-subject').textContent = '【轉發】' + subject.substring(0,40);
   document.getElementById('fwd-modal-list').innerHTML = listHtml;
   document.getElementById('fwd-modal-count').textContent = initChecked ? allMembers.length : 0;
-  // 同步 tab 狀態
   ['general','board','assoc'].forEach(x=>{
     document.getElementById('fwd-tab-'+x)?.classList.toggle('active', x===defaultGroup);
   });
   document.getElementById('fwd-modal').classList.add('open');
-
-  // 勾選變動時更新數量
   document.querySelectorAll('.fwd-check').forEach(cb=>{
     cb.addEventListener('change', updateFwdCount);
   });
@@ -1029,7 +1010,7 @@ function switchFwdGroup(g){
     document.getElementById('fwd-tab-'+x)?.classList.toggle('active',x===g);
   });
   const list = g==='board'?membersBoard:g==='assoc'?membersAssoc:membersGeneral;
-  const defaultChecked = g !== 'assoc'; // 公會預設不勾選
+  const defaultChecked = g !== 'assoc';
   const listHtml = list.map(m=>`
     <label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;">
       <input type="checkbox" class="fwd-check" data-email="${m.email}" data-name="${m.name}" ${defaultChecked?'checked':''}
@@ -1061,13 +1042,9 @@ async function submitForward(){
 async function doForward(msgId,subject,targets,groupName){
   showToast('準備中，取得附件...');
   const finalSubject = currentPrefix + subject;
-
-  // 取得完整信件含附件
   let originalBody='', attachments=[];
   try{
     const fullMsg = await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`);
-
-    // base64url 解碼（支援中文 UTF-8）
     const b64decode2 = (data) => {
       try {
         const b64 = data.replace(/-/g,'+').replace(/_/g,'/');
@@ -1077,7 +1054,6 @@ async function doForward(msgId,subject,targets,groupName){
         return new TextDecoder('utf-8').decode(bytes);
       } catch(e) { return ''; }
     };
-    // 遞迴找 body
     const findBody=(part)=>{
       if(!part)return'';
       if(part.mimeType==='text/html'&&part.body?.data)return b64decode2(part.body.data);
@@ -1086,8 +1062,6 @@ async function doForward(msgId,subject,targets,groupName){
       return'';
     };
     originalBody = findBody(fullMsg.payload)||`<p>${fullMsg.snippet||''}</p>`;
-
-    // 找附件
     const findAttachments=(part)=>{
       if(!part)return;
       if(part.filename&&part.filename.length>0&&part.body?.attachmentId){
@@ -1096,29 +1070,23 @@ async function doForward(msgId,subject,targets,groupName){
       if(part.parts)part.parts.forEach(p=>findAttachments(p));
     };
     findAttachments(fullMsg.payload);
-
-    // 下載附件資料
     for(let att of attachments){
       try{
         const attData = await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msgId}/attachments/${att.attachmentId}`);
-        att.data = attData.data; // base64url
+        att.data = attData.data;
       }catch(e){ att.data=null; }
     }
   }catch(e){ originalBody='<p>（無法載入原始內容）</p>'; }
 
   const bodyHtml=`<div style="font-family:'Noto Sans TC',Arial,sans-serif;font-size:14px;color:#333;line-height:1.8;"><p>各位會員好：</p><p>如標題附件，請參考，謝謝。</p><hr style="border:none;border-top:1px solid #ddd;margin:16px 0;">${originalBody}<hr style="border:none;border-top:1px solid #ddd;margin:16px 0;"><p style="color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></p></div>`;
-
-  // 存成草稿（BCC），等待確認後寄出
   const bccEmails = targets.map(m=>m.email).join(',');
   showToast('儲存草稿中...');
   try{
     const raw = makeEmailWithAttachments(userEmail, bccEmails, finalSubject, bodyHtml, attachments);
     await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts',{method:'POST',body:JSON.stringify({message:{raw}})});
     showToast(`✅ 草稿已儲存！請到草稿匣確認後寄出`);
-    // 記錄統計
     const groupKey = targets === membersGeneral ? 'forward_general' : targets === membersBoard ? 'forward_board' : 'forward_assoc';
     recordAction(groupKey);
-    // 自動切換到草稿匣並重新載入
     setTimeout(()=>{ switchTab('drafts'); setNav('drafts'); loadDrafts(); }, 1000);
   }catch(e){
     showToast('❌ 草稿儲存失敗，請重試');
@@ -1126,12 +1094,44 @@ async function doForward(msgId,subject,targets,groupName){
   }
 }
 
+// ── ✅ 修正：補回缺少的 EMAIL BUILDER 函式 ──
+// makeEmail：單一收件人（To），不含附件
+function makeEmail(to, subject, htmlBody) {
+  const subjectEncoded = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
+  const bodyB64 = btoa(unescape(encodeURIComponent(htmlBody)));
+  let mime = '';
+  mime += 'From: ' + userEmail + '\r\n';
+  mime += 'To: ' + to + '\r\n';
+  mime += 'Subject: ' + subjectEncoded + '\r\n';
+  mime += 'MIME-Version: 1.0\r\n';
+  mime += 'Content-Type: text/html; charset=UTF-8\r\n';
+  mime += 'Content-Transfer-Encoding: base64\r\n';
+  mime += '\r\n';
+  mime += bodyB64;
+  return btoa(mime).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+// makeEmailBcc：BCC 多人，不含附件
+function makeEmailBcc(to, bcc, subject, htmlBody) {
+  const subjectEncoded = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
+  const bodyB64 = btoa(unescape(encodeURIComponent(htmlBody)));
+  let mime = '';
+  mime += 'From: ' + userEmail + '\r\n';
+  mime += 'To: ' + to + '\r\n';
+  mime += 'Bcc: ' + bcc + '\r\n';
+  mime += 'Subject: ' + subjectEncoded + '\r\n';
+  mime += 'MIME-Version: 1.0\r\n';
+  mime += 'Content-Type: text/html; charset=UTF-8\r\n';
+  mime += 'Content-Transfer-Encoding: base64\r\n';
+  mime += '\r\n';
+  mime += bodyB64;
+  return btoa(mime).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
 function makeEmailWithAttachments(from, bcc, subject, htmlBody, attachments) {
   const boundary = 'bnd' + Date.now();
   const subjectEncoded = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
   const bodyB64 = btoa(unescape(encodeURIComponent(htmlBody)));
-
-  // 純文字組裝 MIME（全部 ASCII，包含 base64 編碼的內容）
   let mime = '';
   mime += 'From: ' + from + '\r\n';
   mime += 'Bcc: ' + bcc + '\r\n';
@@ -1144,10 +1144,8 @@ function makeEmailWithAttachments(from, bcc, subject, htmlBody, attachments) {
   mime += 'Content-Transfer-Encoding: base64\r\n';
   mime += '\r\n';
   mime += bodyB64 + '\r\n';
-
   for(const att of attachments) {
     if(!att.data) continue;
-    // base64url → base64（Gmail API 回傳 base64url）
     const attB64 = (att.attachmentId === null)
       ? att.data
       : att.data.replace(/-/g,'+').replace(/_/g,'/');
@@ -1157,19 +1155,15 @@ function makeEmailWithAttachments(from, bcc, subject, htmlBody, attachments) {
     mime += 'Content-Transfer-Encoding: base64\r\n';
     mime += 'Content-Disposition: attachment; filename="' + encName + '"\r\n';
     mime += '\r\n';
-    // base64 每 76 字元換行（RFC 2045 規範）
     mime += attB64.replace(/(.{76})/g, '$1\r\n') + '\r\n';
   }
   mime += '--' + boundary + '--';
-
-  // 整個 MIME 是純 ASCII，直接 btoa
   return btoa(mime).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 
 // ── REPLY DRAFT ──
 function openReplyDraft(msgId, subject, senderName, senderEmail) {
   const cleanEmail = senderEmail.match(/<(.+?)>/)?.[1] || senderEmail;
-  // 開啟編輯草稿視窗
   document.getElementById('reply-modal-to').value = cleanEmail;
   document.getElementById('reply-modal-subject').value = 'Re: ' + subject;
   document.getElementById('reply-modal-body').value = '';
@@ -1203,23 +1197,17 @@ async function createMeetingDraft() {
   const meetingSubject = document.getElementById('meeting-subject').value.trim();
   const type = document.getElementById('meeting-type').value;
   if(!meetingSubject){ showToast('⚠️ 請填寫主旨'); return; }
-
   const body = `敬愛的各位理監事與幹部晚安：\n依據本會章程第33條略以：理事會、監事會每三個月開一次...。召開${meetingSubject}。開會通知單及議程列於附件供參，謝謝大家。\n\nPS：本次會議為${type}會議，地點於林淑惠職能治療所，謝謝。`;
-
-  const subject = meetingSubject;
   const htmlBody = body.replace(/\n/g,'<br>');
-
-  // 建立給每位理監事的草稿（合併BCC方式）
   const bccList = membersBoard.map(m=>m.email).join(',');
-  const raw = makeEmailBcc(membersBoard[0].email, bccList, subject, `<div style="font-family:'Noto Sans TC',sans-serif;font-size:14px;line-height:1.8;">${htmlBody}<br><br><hr style="border:none;border-top:1px solid #ddd;"><p style="color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></p></div>`);
-
+  const raw = makeEmailBcc(membersBoard[0].email, bccList, meetingSubject, `<div style="font-family:'Noto Sans TC',sans-serif;font-size:14px;line-height:1.8;">${htmlBody}<br><br><hr style="border:none;border-top:1px solid #ddd;"><p style="color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></p></div>`);
   try {
     await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts',{
       method:'POST',
       body:JSON.stringify({message:{raw}})
     });
     showToast('✅ 開會通知草稿已建立！請到 Gmail 確認附件後寄出');
-    document.getElementById('meeting-count').value='';
+    // ✅ 修正：移除原本 document.getElementById('meeting-count') 的錯誤操作（該元素不存在）
   } catch(e){ showToast('❌ 草稿建立失敗'); }
 }
 
@@ -1234,7 +1222,6 @@ function selectPrefix(prefix, btn) {
 
 function setSubject(text) {
   document.getElementById('custom-subject').value = text;
-  // 游標移到底部方便繼續編輯
   const input = document.getElementById('custom-subject');
   input.focus();
   input.setSelectionRange(text.length, text.length);
@@ -1277,7 +1264,6 @@ function onAttachChange(input) {
 }
 
 function openPickerForCompose() {
-  // 開啟選人視窗，選完後帶入收件人欄位
   document.getElementById('compose-picker-list').innerHTML =
     [...membersGeneral, ...membersBoard.filter(m=>!membersGeneral.find(g=>g.email===m.email)), ...membersAssoc]
     .filter((m,i,arr)=>arr.findIndex(x=>x.email===m.email)===i)
@@ -1306,12 +1292,9 @@ async function createCustomDraft() {
   const subject = document.getElementById('custom-subject').value.trim();
   const body = document.getElementById('custom-body').value.trim();
   if(!to){ showToast('⚠️ 請填寫收件人'); return; }
-
   const useSignature = signatureEnabled;
   const signature = useSignature ? `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #ddd;color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></div>` : '';
   const htmlBody = `<div style="font-family:'Noto Sans TC',sans-serif;font-size:14px;line-height:1.8;">${body.replace(/\n/g,'<br>')}${signature}</div>`;
-
-  // 讀取附件
   const attachInput = document.getElementById('custom-attach');
   const attachFiles = attachInput ? attachInput.files : [];
   const attachments = [];
@@ -1323,7 +1306,6 @@ async function createCustomDraft() {
     });
     attachments.push({filename:file.name, data, mimeType:file.type||'application/octet-stream', attachmentId:null});
   }
-
   try {
     const raw = attachments.length > 0
       ? makeEmailWithAttachments(userEmail, to, subject, htmlBody, attachments)
@@ -1340,10 +1322,10 @@ async function createCustomDraft() {
   } catch(e){ showToast('❌ 草稿建立失敗'); console.error(e); }
 }
 
-
 async function initAllTab(){
   if(allLoaded)return;
   document.getElementById('all-loading').style.display='flex';
+  document.getElementById('all-loading').innerHTML='<div class="spinner"></div><div class="loading-text">載入中...</div>';
   try{
     const data=await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/messages?labelIds=INBOX&maxResults=40');
     const messages=data.messages||[];
@@ -1379,6 +1361,7 @@ function onSearch(q){
   if(!q.trim()){if(allLoaded)renderAllEmails(allEmailsCache);return;}
   searchTimer=setTimeout(async()=>{
     document.getElementById('all-loading').style.display='flex';
+    document.getElementById('all-loading').innerHTML='<div class="spinner"></div><div class="loading-text">搜尋中...</div>';
     document.getElementById('all-content').innerHTML='';
     try{
       const data=await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=20`);
@@ -1437,6 +1420,7 @@ function openModal(title,body,confirmText,action){
   document.getElementById('modal-confirm').onclick=()=>{action();closeModal();};
   document.getElementById('modal').classList.add('open');
 }
+
 // ── MAIL DETAIL ──
 function openMailDetailById(msgId) {
   const el = document.getElementById('card_' + msgId);
@@ -1445,16 +1429,12 @@ function openMailDetailById(msgId) {
 }
 
 async function openMailDetail(msgId, subject, sender) {
-  // 顯示 loading
   document.getElementById('detail-modal-title').textContent = subject || '（無主旨）';
   document.getElementById('detail-modal-sender').textContent = sender;
   document.getElementById('detail-modal-body').innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div class="loading-text">載入中...</div></div>';
   document.getElementById('detail-modal').classList.add('open');
-
   try {
     const fullMsg = await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`);
-
-    // 解碼工具：支援 base64 和 quoted-printable，自動處理 UTF-8 中文
     const b64decode = (data) => {
       try {
         const b64 = data.replace(/-/g,'+').replace(/_/g,'/');
@@ -1464,14 +1444,11 @@ async function openMailDetail(msgId, subject, sender) {
         return new TextDecoder('utf-8').decode(bytes);
       } catch(e) { return ''; }
     };
-
     const decodeQP = (str) => {
-      // 解碼 quoted-printable
       return str
         .replace(/=\r?\n/g,'')
         .replace(/=([0-9A-Fa-f]{2})/g, (_,h)=>String.fromCharCode(parseInt(h,16)));
     };
-
     const decodeContent = (part) => {
       if(!part.body?.data) return '';
       const encoding = (part.headers||[]).find(h=>h.name.toLowerCase()==='content-transfer-encoding')?.value||'';
@@ -1484,20 +1461,15 @@ async function openMailDetail(msgId, subject, sender) {
       }
       return b64decode(part.body.data);
     };
-
-    // 遞迴找 body，優先 HTML，其次 plain text
     const findBody = (part) => {
       if(!part) return '';
-      if(part.mimeType==='text/html' && part.body?.data)
-        return decodeContent(part);
+      if(part.mimeType==='text/html' && part.body?.data) return decodeContent(part);
       if(part.mimeType==='text/plain' && part.body?.data)
         return '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.7;">'+decodeContent(part)+'</pre>';
       if(part.parts){ for(const p of part.parts){ const r=findBody(p); if(r) return r; } }
       return '';
     };
     const bodyHtml = findBody(fullMsg.payload) || '<p style="color:#888">（無內容）</p>';
-
-    // 找附件
     const attachments = [];
     const findAtt = (part) => {
       if(!part) return;
@@ -1506,7 +1478,6 @@ async function openMailDetail(msgId, subject, sender) {
       if(part.parts) part.parts.forEach(p=>findAtt(p));
     };
     findAtt(fullMsg.payload);
-
     let attHtml = '';
     if(attachments.length) {
       const attItems = attachments.map(a=>`
@@ -1525,7 +1496,6 @@ async function openMailDetail(msgId, subject, sender) {
         ${attItems}
       </div>`;
     }
-
     document.getElementById('detail-modal-body').innerHTML =
       `<div style="font-size:13px;line-height:1.7;color:var(--text2);">${bodyHtml}</div>${attHtml}`;
   } catch(e) {
@@ -1578,12 +1548,9 @@ async function openEditDraft(draftId, subject, to, snippet) {
     });
     const draft = await res.json();
     const msg = draft.message || {};
-
-    // 更新收件人
     const toHeader = getHeader(msg, 'To') || getHeader(msg, 'Bcc') || to;
     document.getElementById('edit-draft-to').value = toHeader;
 
-    // base64 解碼
     const b64dec = function(data) {
       try {
         const b64 = data.replace(/-/g,'+').replace(/_/g,'/');
@@ -1593,8 +1560,6 @@ async function openEditDraft(draftId, subject, to, snippet) {
         return new TextDecoder('utf-8').decode(bytes);
       } catch(e) { return ''; }
     };
-
-    // 遞迴找 part
     const findPart = function(part, mime) {
       if(!part) return null;
       if(part.mimeType === mime && part.body && part.body.data) return part;
@@ -1606,24 +1571,19 @@ async function openEditDraft(draftId, subject, to, snippet) {
       }
       return null;
     };
-
     const plainPart = findPart(msg.payload, 'text/plain');
     const htmlPart  = findPart(msg.payload, 'text/html');
     let bodyText = '';
-
     if(plainPart) {
       bodyText = b64dec(plainPart.body.data);
     } else if(htmlPart) {
       const tmp = document.createElement('div');
       tmp.innerHTML = b64dec(htmlPart.body.data);
-      // 移除公會結語
       tmp.querySelectorAll('div[style*="border-top"],div[style*="padding-top"],hr').forEach(function(el){ el.remove(); });
       bodyText = tmp.innerText || tmp.textContent || '';
     }
-
     bodyText = bodyText.replace(/[ \t]{2,}/g, ' ').replace(/[\n]{3,}/g, '\n\n').trim();
     document.getElementById('edit-draft-body').value = bodyText || '';
-
   } catch(e) {
     document.getElementById('edit-draft-body').value = '';
     console.error('載入草稿內容失敗', e);
@@ -1657,8 +1617,6 @@ async function saveEditDraft() {
   const sig = signatureEnabled ? `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #ddd;color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></div>` : '';
   const htmlBody = '<div style="font-family:Noto Sans TC,sans-serif;font-size:14px;line-height:1.8;">' + body.replace(/\n/g,'<br>') + sig + '</div>';
 
-
-  // 讀取新附件
   const attachInput = document.getElementById('edit-draft-attach');
   const attachments = [];
   for(const file of (attachInput?.files || [])) {
@@ -1672,7 +1630,7 @@ async function saveEditDraft() {
 
   try {
     console.log('saveEditDraft 開始', draftId, to, subject, body.length);
-    // 用 PATCH 更新草稿（不需要刪除再建立，也不需要 modify 權限）
+    // ✅ makeEmail 已定義，這裡可正常呼叫
     const raw = attachments.length > 0
       ? makeEmailWithAttachments(userEmail, to, subject, htmlBody, attachments)
       : makeEmail(to, subject, htmlBody);
@@ -1707,53 +1665,6 @@ function closeDetailModal() {
 }
 
 // ── DRAFTS ──
-async function diagnoseDrafts() {
-  const c = document.getElementById('drafts-content');
-  c.innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div class="loading-text">診斷中...</div></div>';
-  
-  // 測試 1: 確認 token 存在
-  if(!accessToken) {
-    c.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>沒有 access token，請重新登入</div>';
-    return;
-  }
-  
-  // 測試 2: 顯示 token 前幾碼
-  const tokenPreview = accessToken.substring(0,20) + '...';
-  
-  // 測試 3: 直接呼叫 API 並顯示原始回應
-  try {
-    const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/drafts?maxResults=5', {
-      headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' }
-    });
-    const text = await res.text();
-    c.innerHTML = `<div style="padding:12px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text2);word-break:break-all;line-height:1.6;">
-      <div style="color:var(--accent);font-weight:700;margin-bottom:6px;">診斷結果</div>
-      <div>HTTP 狀態：<span style="color:${res.ok?'var(--green)':'var(--red)'}">${res.status} ${res.statusText}</span></div>
-      <div style="margin-top:6px;">Token 前段：${tokenPreview}</div>
-      <div style="margin-top:6px;">API 回應：</div>
-      <div style="margin-top:4px;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;">${text.substring(0,500)}</div>
-    </div>`;
-  } catch(e) {
-    c.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>網路錯誤：${e.message}</div>`;
-  }
-}
-
-function reAuthAndLoadDrafts() {
-  // 強制重新取得有草稿權限的 token
-  const client = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: SCOPES,
-    prompt: 'consent',
-    callback: async (resp) => {
-      if(resp.error){ showToast('❌ 授權失敗：' + resp.error); return; }
-      accessToken = resp.access_token;
-      showToast('✅ 重新授權成功！');
-      loadDrafts();
-    }
-  });
-  client.requestAccessToken();
-}
-
 async function loadDrafts() {
   const loadEl = document.getElementById('drafts-loading');
   const contentEl = document.getElementById('drafts-content');
@@ -1761,7 +1672,6 @@ async function loadDrafts() {
   contentEl.innerHTML = '';
 
   try {
-    // 第一步：取得草稿清單
     const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/drafts?maxResults=15', {
       headers: { 'Authorization': 'Bearer ' + accessToken }
     });
@@ -1775,7 +1685,6 @@ async function loadDrafts() {
       return;
     }
 
-    // 第二步：逐一取得草稿詳細資料並立即渲染
     contentEl.innerHTML = '';
     loadEl.style.display = 'none';
 
@@ -1834,44 +1743,6 @@ async function loadDrafts() {
   }
 }
 
-
-function renderDrafts(drafts) {
-  const c = document.getElementById('drafts-content');
-  if(!drafts.length) { c.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div>沒有草稿</div>'; return; }
-  const cards = drafts.map(d => {
-    const msg = d.message || {};
-    const subject = getHeader(msg,'Subject') || '（無主旨）';
-    const to = getHeader(msg,'To') || '';
-    const bcc = getHeader(msg,'Bcc') || '';
-    const date = formatDate(getHeader(msg,'Date'));
-    const recipientCount = bcc ? bcc.split(',').length : (to ? to.split(',').length : 0);
-    const recipients = to || bcc || '（無收件人）';
-    const cardEl = document.createElement('div');
-    cardEl.className = 'mail-card type-info';
-    cardEl.style.borderLeftColor = 'var(--yellow)';
-    cardEl._draftData = {id: d.id, subject};
-    cardEl.innerHTML = `
-      <div class="mail-top">
-        <div class="mail-sender" style="color:var(--yellow)">📝 草稿</div>
-        <div class="mail-date">${date}</div>
-      </div>
-      <div class="mail-subject">${esc(subject.substring(0,52))}</div>
-      <div class="mail-snippet" style="color:var(--text2);">收件人：${recipientCount > 1 ? recipientCount+'位（BCC）' : esc(recipients.substring(0,40))}</div>
-      <div class="mail-actions">
-        <button class="btn-sm btn-primary" data-action="preview">👁 預覽</button>
-        <button class="btn-sm btn-yellow" data-action="send">📤 寄出</button>
-        <button class="btn-sm btn-danger" data-action="delete">🗑 刪除</button>
-      </div>`;
-    // 綁定事件避免字串跳脫問題
-    cardEl.querySelector('[data-action="preview"]').onclick = () => previewDraft(d.id, subject);
-    cardEl.querySelector('[data-action="send"]').onclick = function(){ sendDraft(d.id, this); };
-    cardEl.querySelector('[data-action="delete"]').onclick = function(){ deleteDraft(d.id, this); };
-    return cardEl;
-  });
-  c.innerHTML = '';
-  cards.forEach(card => c.appendChild(card));
-}
-
 async function previewDraft(draftId, subject) {
   document.getElementById('detail-modal-title').textContent = subject;
   document.getElementById('detail-modal-sender').textContent = '草稿預覽';
@@ -1880,7 +1751,6 @@ async function previewDraft(draftId, subject) {
   try {
     const draft = await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts/' + draftId + '?format=full');
     const msg = draft.message || {};
-
     const b64dec = function(data) {
       try {
         const b64 = data.replace(/-/g,'+').replace(/_/g,'/');
@@ -1890,7 +1760,6 @@ async function previewDraft(draftId, subject) {
         return new TextDecoder('utf-8').decode(bytes);
       } catch(e) { return ''; }
     };
-
     const findBody = function(part) {
       if(!part) return '';
       if(part.mimeType==='text/html' && part.body && part.body.data) return b64dec(part.body.data);
@@ -1898,8 +1767,6 @@ async function previewDraft(draftId, subject) {
       if(part.parts) { for(let i=0;i<part.parts.length;i++) { const r=findBody(part.parts[i]); if(r) return r; } }
       return '';
     };
-
-    // 找附件
     const atts = [];
     const findAtts = function(part) {
       if(!part) return;
@@ -1908,12 +1775,10 @@ async function previewDraft(draftId, subject) {
       if(part.parts) part.parts.forEach(function(p){ findAtts(p); });
     };
     findAtts(msg.payload);
-
     const bodyHtml = findBody(msg.payload) || '<p style="color:#888">（無內容）</p>';
     const to  = getHeader(msg,'To') || '';
     const bcc = getHeader(msg,'Bcc') || '';
     document.getElementById('detail-modal-sender').textContent = '收件人：' + (bcc ? 'BCC ' + bcc.split(',').length + ' 位' : to);
-
     let attHtml = '';
     if(atts.length) {
       attHtml = '<div style="margin-top:10px;padding:10px;background:var(--surface2);border-radius:8px;">'
@@ -1921,7 +1786,6 @@ async function previewDraft(draftId, subject) {
         + atts.map(function(name){ return '<div style="font-size:12px;color:var(--text2);padding:2px 0;">📄 ' + esc(name) + '</div>'; }).join('')
         + '</div>';
     }
-
     document.getElementById('detail-modal-body').innerHTML = '<div style="font-size:13px;line-height:1.7;color:var(--text2);">' + bodyHtml + '</div>' + attHtml;
   } catch(e) {
     document.getElementById('detail-modal-body').innerHTML = '<p style="color:var(--red)">❌ 無法載入草稿內容</p>';
@@ -1934,10 +1798,7 @@ async function sendDraftScheduled(draftId, btn, card) {
   if(scheduleVal) {
     const scheduleTime = new Date(scheduleVal);
     const now = new Date();
-    if(scheduleTime <= now) {
-      showToast('⚠️ 排程時間必須在未來');
-      return;
-    }
+    if(scheduleTime <= now) { showToast('⚠️ 排程時間必須在未來'); return; }
     const diff = scheduleTime - now;
     const mins = Math.round(diff / 60000);
     const label = mins < 60 ? mins + ' 分鐘後' : Math.round(mins/60) + ' 小時後';
@@ -1955,10 +1816,7 @@ async function sendDraft(draftId, btn) {
   try {
     const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/drafts/send', {
       method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + accessToken,
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: draftId })
     });
     const data = await res.json();
@@ -2007,17 +1865,12 @@ async function deleteDraft(draftId, btn) {
 }
 
 // ── STATS ──
-// 本地儲存統計資料
 function getStatsData() {
-  try {
-    return JSON.parse(localStorage.getItem('mailStats') || '{}');
-  } catch(e) { return {}; }
+  try { return JSON.parse(localStorage.getItem('mailStats') || '{}'); } catch(e) { return {}; }
 }
-
 function saveStatsData(data) {
   try { localStorage.setItem('mailStats', JSON.stringify(data)); } catch(e) {}
 }
-
 function recordAction(type) {
   const data = getStatsData();
   const now = new Date();
@@ -2043,14 +1896,12 @@ function initExportSelectors() {
   const now = new Date();
   const yearEl = document.getElementById('export-year');
   if(!yearEl) return;
-  // 加入 2024-今年的選項
   for(let y = 2024; y <= now.getFullYear(); y++) {
     const opt = document.createElement('option');
     opt.value = y; opt.textContent = y + '年';
     if(y === now.getFullYear()) opt.selected = true;
     yearEl.appendChild(opt);
   }
-  // 預設當月
   document.getElementById('export-month').value = now.getMonth() + 1;
 }
 
@@ -2059,12 +1910,9 @@ async function exportMonthlyReport() {
   let month = parseInt(document.getElementById('export-month').value);
   const statusEl = document.getElementById('export-status');
   statusEl.textContent = '📡 正在從 Gmail 抓取資料...';
-
-  // 判斷模式
   const isCustom = document.getElementById('export-mode-custom').style.display !== 'none';
   let afterStr, beforeStr, exportLabel;
   const pad = n => String(n).padStart(2,'0');
-
   if(isCustom) {
     const fromVal = document.getElementById('export-date-from').value;
     const toVal = document.getElementById('export-date-to').value;
@@ -2082,9 +1930,7 @@ async function exportMonthlyReport() {
     beforeStr = Math.floor(endDate.getTime()/1000) + 1;
     exportLabel = month+'月';
   }
-
   try {
-    // 抓收件
     statusEl.textContent = '📥 抓取收件資料中...';
     const inboxRes = await fetch(
       `https://www.googleapis.com/gmail/v1/users/me/messages?q=in:inbox+after:${afterStr}+before:${beforeStr}&maxResults=500`,
@@ -2092,8 +1938,6 @@ async function exportMonthlyReport() {
     );
     const inboxData = await inboxRes.json();
     const inboxMsgIds = inboxData.messages || [];
-
-    // 抓寄件
     statusEl.textContent = '📤 抓取寄件資料中...';
     const sentRes = await fetch(
       `https://www.googleapis.com/gmail/v1/users/me/messages?q=in:sent+after:${afterStr}+before:${beforeStr}&maxResults=500`,
@@ -2101,8 +1945,6 @@ async function exportMonthlyReport() {
     );
     const sentData = await sentRes.json();
     const sentMsgIds = sentData.messages || [];
-
-    // 取得收件詳細
     statusEl.textContent = `📬 讀取 ${inboxMsgIds.length} 封收件詳細...`;
     const inboxDetails = await Promise.all(
       inboxMsgIds.slice(0,200).map(m =>
@@ -2110,8 +1952,6 @@ async function exportMonthlyReport() {
           {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json())
       )
     );
-
-    // 取得寄件詳細
     statusEl.textContent = `📮 讀取 ${sentMsgIds.length} 封寄件詳細...`;
     const sentDetails = await Promise.all(
       sentMsgIds.slice(0,200).map(m =>
@@ -2119,45 +1959,36 @@ async function exportMonthlyReport() {
           {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json())
       )
     );
-
-    // 整理資料
     const formatDateTW = (dateStr) => {
       if(!dateStr) return '';
       const d = new Date(dateStr);
       return (d.getMonth()+1) + '月' + d.getDate() + '日';
     };
-
     const cleanSender = (from) => {
       if(!from) return '';
       const match = from.match(/^"?([^"<]+)"?\s*<?/);
       return (match ? match[1].trim() : from).replace(/"/g,'').trim();
     };
-
     const inboxRows = inboxDetails
       .filter(m => m.payload)
       .map(m => {
         const date = formatDateTW(getHeader(m,'Date'));
         const from = cleanSender(getHeader(m,'From'));
         const subject = getHeader(m,'Subject') || '（無主旨）';
-        return [date, from, subject, '', ''];  // 收件日期, 寄件人, 主旨, 回覆日期, 處理
+        return [date, from, subject, '', ''];
       })
       .sort((a,b) => a[0].localeCompare(b[0]));
-
     const sentRows = sentDetails
       .filter(m => m.payload)
       .map(m => {
         const date = formatDateTW(getHeader(m,'Date'));
         const subject = getHeader(m,'Subject') || '（無主旨）';
-        return [date, subject, ''];  // 寄件日期, 主旨, 備註
+        return [date, subject, ''];
       })
       .sort((a,b) => a[0].localeCompare(b[0]));
-
     statusEl.textContent = '📊 產生 Excel 檔案...';
-
-    // 用 SheetJS 產生 Excel
     buildExcel(year, month, inboxRows, sentRows, exportLabel);
     statusEl.textContent = `✅ 已匯出！收件 ${inboxRows.length} 筆 / 寄件 ${sentRows.length} 筆`;
-
   } catch(e) {
     statusEl.textContent = '❌ 匯出失敗：' + e.message;
     console.error(e);
@@ -2166,57 +1997,29 @@ async function exportMonthlyReport() {
 
 function buildExcel(year, month, inboxRows, sentRows, exportLabel) {
   exportLabel = exportLabel || (month+'月');
-  // 動態載入 SheetJS
   if(typeof XLSX === 'undefined') {
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-    script.onload = () => buildExcel(year, month, inboxRows, sentRows);
+    script.onload = () => buildExcel(year, month, inboxRows, sentRows, exportLabel);
     document.head.appendChild(script);
     return;
   }
-
   const wb = XLSX.utils.book_new();
-  const yearTW = year - 1911; // 民國年
+  const yearTW = year - 1911;
   const sheetName = `${yearTW}年度${exportLabel}電郵`;
-
-  // 合併收件和寄件成同一張表（左右排列）
   const maxRows = Math.max(inboxRows.length, sentRows.length);
   const wsData = [];
-
-  // 標題列
-  wsData.push([
-    `${yearTW}年度-信箱收件`, '', '', '', '',
-    `${yearTW}年度-信箱寄件`, '', ''
-  ]);
-  wsData.push([
-    '收件日期', '寄件人', '主旨', '回覆日期', '處理',
-    '寄件日期', '主旨', '備註'
-  ]);
-
-  // 資料列
+  wsData.push([`${yearTW}年度-信箱收件`, '', '', '', '', `${yearTW}年度-信箱寄件`, '', '']);
+  wsData.push(['收件日期', '寄件人', '主旨', '回覆日期', '處理', '寄件日期', '主旨', '備註']);
   for(let i = 0; i < maxRows; i++) {
     const inbox = inboxRows[i] || ['', '', '', '', ''];
     const sent = sentRows[i] || ['', '', ''];
     wsData.push([...inbox, ...sent]);
   }
-
   const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-  // 欄寬設定
-  ws['!cols'] = [
-    {wch:10}, {wch:20}, {wch:45}, {wch:10}, {wch:15},
-    {wch:10}, {wch:45}, {wch:15}
-  ];
-
-  // 合併標題儲存格
-  ws['!merges'] = [
-    {s:{r:0,c:0}, e:{r:0,c:4}},  // 收件標題
-    {s:{r:0,c:5}, e:{r:0,c:7}}   // 寄件標題
-  ];
-
+  ws['!cols'] = [{wch:10},{wch:20},{wch:45},{wch:10},{wch:15},{wch:10},{wch:45},{wch:15}];
+  ws['!merges'] = [{s:{r:0,c:0},e:{r:0,c:4}},{s:{r:0,c:5},e:{r:0,c:7}}];
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
-
-  // 下載
   const filename = `${yearTW}年${exportLabel}電郵統計.xlsx`;
   XLSX.writeFile(wb, filename);
 }
@@ -2224,11 +2027,9 @@ function buildExcel(year, month, inboxRows, sentRows, exportLabel) {
 async function loadStats() {
   document.getElementById('stats-loading').style.display='flex';
   document.getElementById('stats-content').innerHTML='';
-
   try {
     const now = new Date();
     const months = [];
-    // 產生最近6個月的時間範圍
     for(let i=0; i<6; i++) {
       const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
       const after = Math.floor(d.getTime()/1000);
@@ -2239,53 +2040,35 @@ async function loadStats() {
         key: d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')
       });
     }
-
-    // 逐月查詢（不並行，避免 API 限制）
     const results = [];
     for(const m of months) {
       try {
         const afterDate = new Date(m.after*1000);
         const beforeDate = new Date(m.before*1000);
-        // Gmail API 使用 yyyy/mm/dd 格式
         const pad = n => String(n).padStart(2,'0');
         const afterStr = afterDate.getFullYear()+'/'+pad(afterDate.getMonth()+1)+'/'+pad(afterDate.getDate());
         const beforeStr = beforeDate.getFullYear()+'/'+pad(beforeDate.getMonth()+1)+'/'+pad(beforeDate.getDate());
-
         const inboxRes = await fetch(
           `https://www.googleapis.com/gmail/v1/users/me/messages?q=in:inbox+after:${afterStr}+before:${beforeStr}&maxResults=500`,
           {headers:{'Authorization':'Bearer '+accessToken}}
         );
         const inboxData = await inboxRes.json();
-
         const sentRes = await fetch(
           `https://www.googleapis.com/gmail/v1/users/me/messages?q=in:sent+after:${afterStr}+before:${beforeStr}&maxResults=500`,
           {headers:{'Authorization':'Bearer '+accessToken}}
         );
         const sentData = await sentRes.json();
-
-        console.log(m.label, 'inbox:', inboxData, 'sent:', sentData);
-
         results.push({
           label: m.label,
           inbox: inboxData.messages ? inboxData.messages.length : 0,
           sent: sentData.messages ? sentData.messages.length : 0
         });
       } catch(e) {
-        console.error(m.label, e);
         results.push({label: m.label, inbox: 0, sent: 0});
       }
     }
-
-    // 取得本月轉發統計（從本地儲存）
-    const localData = getStatsData();
-    const monthKey = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-    const monthStats = localData[monthKey] || {forward_general:0,forward_board:0,forward_assoc:0,sent:0};
-    const totalForward = (monthStats.forward_general||0)+(monthStats.forward_board||0)+(monthStats.forward_assoc||0);
-
-    // 最大值（用於長度比例）
     const maxInbox = Math.max(...results.map(r=>r.inbox), 1);
     const maxSent = Math.max(...results.map(r=>r.sent), 1);
-
     document.getElementById('stats-content').innerHTML = `
       <div style="background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:14px;">📊 每月信件統計</div>
@@ -2313,17 +2096,12 @@ async function loadStats() {
               </div>
             </div>
           </div>`).join('')}
-      </div>
-
-
-    `;
+      </div>`;
   } catch(e) {
     document.getElementById('stats-content').innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>載入失敗：'+e.message+'</div>';
-    console.error(e);
   }
   document.getElementById('stats-loading').style.display='none';
 }
-
 
 function closeModal(){document.getElementById('modal').classList.remove('open');}
 </script>
