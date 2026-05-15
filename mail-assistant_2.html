@@ -916,8 +916,8 @@ function renderMailCard(msg,subject,from,date,type) {
     const b2 = mkBtn('btn-purple', '🏢 公會');
     const b3 = mkBtn('btn-ghost', '已讀');
     const b4 = mkBtn('btn-danger', '🗑');
-    b1.onclick = () => fwdById('general', subject||'', safeTid);
-    b2.onclick = () => fwdById('assoc', subject||'', safeTid);
+    b1.onclick = () => fwdById('general', subject||'', safeId);
+    b2.onclick = () => fwdById('assoc', subject||'', safeId);
     b3.onclick = function(){ markRead(safeId, this); };
     b4.onclick = function(){ trashMail(safeId, this); };
     [b1,b2,b3,b4].forEach(b => actionsDiv.appendChild(b));
@@ -925,7 +925,7 @@ function renderMailCard(msg,subject,from,date,type) {
     const b1 = mkBtn('btn-purple', '🏛 轉發理監事');
     const b2 = mkBtn('btn-ghost', '已讀');
     const b3 = mkBtn('btn-danger', '🗑');
-    b1.onclick = () => fwdById('board', subject||'', safeTid);
+    b1.onclick = () => fwdById('board', subject||'', safeId);
     b2.onclick = function(){ markRead(safeId, this); };
     b3.onclick = function(){ trashMail(safeId, this); };
     [b1,b2,b3].forEach(b => actionsDiv.appendChild(b));
@@ -939,7 +939,7 @@ function renderMailCard(msg,subject,from,date,type) {
     const b1 = mkBtn('btn-yellow', '👥 轉發');
     const b2 = mkBtn('btn-ghost', '✅ 存查');
     const b3 = mkBtn('btn-danger', '🗑');
-    b1.onclick = () => fwdById('general', subject||'', safeTid);
+    b1.onclick = () => fwdById('general', subject||'', safeId);
     b2.onclick = function(){ markRead(safeId, this); };
     b3.onclick = function(){ trashMail(safeId, this); };
     [b1,b2,b3].forEach(b => actionsDiv.appendChild(b));
@@ -947,7 +947,7 @@ function renderMailCard(msg,subject,from,date,type) {
     const b1 = mkBtn('btn-yellow', '👥 轉發');
     const b2 = mkBtn('btn-ghost', '已讀');
     const b3 = mkBtn('btn-danger', '🗑');
-    b1.onclick = () => fwdById('general', subject||'', safeTid);
+    b1.onclick = () => fwdById('general', subject||'', safeId);
     b2.onclick = function(){ markRead(safeId, this); };
     b3.onclick = function(){ trashMail(safeId, this); };
     [b1,b2,b3].forEach(b => actionsDiv.appendChild(b));
