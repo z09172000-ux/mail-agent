@@ -1671,16 +1671,19 @@ async function saveEditDraft() {
   }
 
   try {
+    console.log('saveEditDraft 開始', draftId, to, subject, body.length);
     // 用 PATCH 更新草稿（不需要刪除再建立，也不需要 modify 權限）
     const raw = attachments.length > 0
       ? makeEmailWithAttachments(userEmail, to, subject, htmlBody, attachments)
       : makeEmail(to, subject, htmlBody);
+    console.log('PUT 草稿 ID:', draftId, 'raw 長度:', raw.length);
     const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/drafts/' + draftId, {
       method: 'PUT',
       headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: { raw } })
     });
     const data = await res.json();
+    console.log('PUT 回應：', res.status, data);
     if(!res.ok) {
       showToast('❌ 更新失敗：' + (data.error?.message || res.status));
       console.error('saveEditDraft 錯誤：', data);
