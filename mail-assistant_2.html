@@ -978,10 +978,8 @@ async function trashMail(id,btn){
 // ── FORWARD ──
 let pendingFwdId='', pendingFwdSubject='';
 
-function fwdById(msgId, group) {
-  const el = document.getElementById('card_' + msgId);
-  const subject = el ? (el._mailData?.subject || '') : '';
-  confirmForward(msgId, subject, group);
+function fwdById(group, subject, threadId) {
+  confirmForward(threadId, subject, group);
 }
 
 function confirmForward(msgId, subject, defaultGroup){
