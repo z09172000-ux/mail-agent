@@ -1962,8 +1962,8 @@ function initExportSelectors() {
 }
 
 async function exportMonthlyReport() {
-  const year = parseInt(document.getElementById('export-year').value);
-  const month = parseInt(document.getElementById('export-month').value);
+  let year = parseInt(document.getElementById('export-year').value);
+  let month = parseInt(document.getElementById('export-month').value);
   const statusEl = document.getElementById('export-status');
   statusEl.textContent = '📡 正在從 Gmail 抓取資料...';
 
