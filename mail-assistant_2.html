@@ -1127,62 +1127,43 @@ async function doForward(msgId,subject,targets,groupName){
 }
 
 function makeEmailWithAttachments(from, bcc, subject, htmlBody, attachments) {
-  const boundary = 'boundary_' + Date.now();
+  const boundary = 'bnd' + Date.now();
   const subjectEncoded = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
   const bodyB64 = btoa(unescape(encodeURIComponent(htmlBody)));
 
-  // 用 Uint8Array 組裝 MIME，避免雙重編碼問題
-  const enc = new TextEncoder();
-  const parts = [];
+  // 純文字組裝 MIME（全部 ASCII，包含 base64 編碼的內容）
+  let mime = '';
+  mime += 'From: ' + from + '\r\n';
+  mime += 'Bcc: ' + bcc + '\r\n';
+  mime += 'Subject: ' + subjectEncoded + '\r\n';
+  mime += 'MIME-Version: 1.0\r\n';
+  mime += 'Content-Type: multipart/mixed; boundary="' + boundary + '"\r\n';
+  mime += '\r\n';
+  mime += '--' + boundary + '\r\n';
+  mime += 'Content-Type: text/html; charset=UTF-8\r\n';
+  mime += 'Content-Transfer-Encoding: base64\r\n';
+  mime += '\r\n';
+  mime += bodyB64 + '\r\n';
 
-  // Header + HTML body
-  const header = [
-    'From: ' + from,
-    'Bcc: ' + bcc,
-    'Subject: ' + subjectEncoded,
-    'MIME-Version: 1.0',
-    'Content-Type: multipart/mixed; boundary="' + boundary + '"',
-    '',
-    '--' + boundary,
-    'Content-Type: text/html; charset=UTF-8',
-    'Content-Transfer-Encoding: base64',
-    '',
-    bodyB64,
-  ].join('\r\n');
-  parts.push(enc.encode(header));
-
-  // 加入附件
-  for(const att of attachments){
+  for(const att of attachments) {
     if(!att.data) continue;
-    // base64url → base64
-    const attData = att.attachmentId === null
+    // base64url → base64（Gmail API 回傳 base64url）
+    const attB64 = (att.attachmentId === null)
       ? att.data
       : att.data.replace(/-/g,'+').replace(/_/g,'/');
-    const filename = '=?UTF-8?B?'+btoa(unescape(encodeURIComponent(att.filename)))+'?=';
-    const attHeader = '\r\n--' + boundary + '\r\n' +
-      'Content-Type: ' + att.mimeType + '; name="' + filename + '"\r\n' +
-      'Content-Transfer-Encoding: base64\r\n' +
-      'Content-Disposition: attachment; filename="' + filename + '"\r\n\r\n';
-    parts.push(enc.encode(attHeader));
-
-    // 附件資料直接用 base64 bytes
-    const attBytes = enc.encode(attData);
-    parts.push(attBytes);
+    const encName = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(att.filename))) + '?=';
+    mime += '--' + boundary + '\r\n';
+    mime += 'Content-Type: ' + att.mimeType + '; name="' + encName + '"\r\n';
+    mime += 'Content-Transfer-Encoding: base64\r\n';
+    mime += 'Content-Disposition: attachment; filename="' + encName + '"\r\n';
+    mime += '\r\n';
+    // base64 每 76 字元換行（RFC 2045 規範）
+    mime += attB64.replace(/(.{76})/g, '$1\r\n') + '\r\n';
   }
+  mime += '--' + boundary + '--';
 
-  // 結尾
-  parts.push(enc.encode('\r\n--' + boundary + '--'));
-
-  // 合併所有 parts
-  const totalLen = parts.reduce((s, p) => s + p.length, 0);
-  const combined = new Uint8Array(totalLen);
-  let offset = 0;
-  for(const p of parts) { combined.set(p, offset); offset += p.length; }
-
-  // 轉成 base64url（不能用 btoa 因為有 non-ASCII bytes）
-  let binary = '';
-  for(let i = 0; i < combined.length; i++) binary += String.fromCharCode(combined[i]);
-  return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  // 整個 MIME 是純 ASCII，直接 btoa
+  return btoa(mime).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 
 // ── REPLY DRAFT ──
@@ -1818,6 +1799,12 @@ async function loadDrafts() {
           <div class="mail-snippet" style="color:var(--text2);">
             收件人：${recipientCount > 1 ? recipientCount+'位（BCC）' : esc(recipients.substring(0,40))}
           </div>
+          <div class="draft-schedule" style="margin:6px 0;display:flex;align-items:center;gap:6px;">
+            <span style="font-size:11px;color:var(--text3);">⏰ 排程</span>
+            <input type="datetime-local" class="draft-schedule-input"
+              style="flex:1;padding:5px 8px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:11px;font-family:inherit;outline:none;">
+            <span style="font-size:10px;color:var(--text3);">留空=立即寄</span>
+          </div>
           <div class="mail-actions">
             <button class="btn-sm btn-primary">👁 預覽</button>
             <button class="btn-sm btn-ghost">✏️ 編修</button>
@@ -1827,7 +1814,7 @@ async function loadDrafts() {
 
         card.querySelector('.btn-primary').onclick = () => previewDraft(d.id, subject);
         card.querySelector('.btn-ghost').onclick = () => openEditDraft(d.id, subject, to||bcc||'', '');
-        card.querySelector('.btn-yellow').onclick = function(){ sendDraft(d.id, this); };
+        card.querySelector('.btn-yellow').onclick = function(){ sendDraftScheduled(d.id, this, card); };
         card.querySelector('.btn-danger').onclick = function(){ deleteDraft(d.id, this); };
         contentEl.appendChild(card);
       } catch(e2) {
@@ -1933,6 +1920,28 @@ async function previewDraft(draftId, subject) {
   } catch(e) {
     document.getElementById('detail-modal-body').innerHTML = '<p style="color:var(--red)">❌ 無法載入草稿內容</p>';
   }
+}
+
+async function sendDraftScheduled(draftId, btn, card) {
+  const scheduleInput = card.querySelector('.draft-schedule-input');
+  const scheduleVal = scheduleInput ? scheduleInput.value : '';
+  if(scheduleVal) {
+    const scheduleTime = new Date(scheduleVal);
+    const now = new Date();
+    if(scheduleTime <= now) {
+      showToast('⚠️ 排程時間必須在未來');
+      return;
+    }
+    const diff = scheduleTime - now;
+    const mins = Math.round(diff / 60000);
+    const label = mins < 60 ? mins + ' 分鐘後' : Math.round(mins/60) + ' 小時後';
+    showToast('⏰ 已排程！將在 ' + label + ' 寄出');
+    setTimeout(function(){ sendDraft(draftId, btn); }, diff);
+    btn.textContent = '⏰ ' + label;
+    btn.disabled = true;
+    return;
+  }
+  sendDraft(draftId, btn);
 }
 
 async function sendDraft(draftId, btn) {
