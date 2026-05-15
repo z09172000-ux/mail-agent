@@ -1613,14 +1613,33 @@ async function openEditDraft(draftId, subject, to, snippet) {
         return new TextDecoder('utf-8').decode(bytes);
       } catch(e) { return ''; }
     };
+    // 優先找 text/plain，找不到就從 HTML 轉換
     const findPlain = (part) => {
       if(!part) return '';
       if(part.mimeType==='text/plain' && part.body?.data) return b64decode(part.body.data);
       if(part.parts){ for(const p of part.parts){ const r=findPlain(p); if(r) return r; } }
       return '';
     };
-    const plainBody = findPlain(msg.payload);
-    if(plainBody) document.getElementById('edit-draft-body').value = plainBody.trim();
+    const findHtml = (part) => {
+      if(!part) return '';
+      if(part.mimeType==='text/html' && part.body?.data) return b64decode(part.body.data);
+      if(part.parts){ for(const p of part.parts){ const r=findHtml(p); if(r) return r; } }
+      return '';
+    };
+    let bodyText = findPlain(msg.payload);
+    if(!bodyText.trim()) {
+      // 從 HTML 轉純文字
+      const html = findHtml(msg.payload);
+      if(html) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        // 移除結語區塊（border-top 的 div）
+        tmp.querySelectorAll('div[style*="border-top"]').forEach(el => el.remove());
+        tmp.querySelectorAll('hr, br').forEach(function(el){ el.parentNode.replaceChild(document.createTextNode(' '), el); });
+        bodyText = tmp.textContent || tmp.innerText || '';
+      }
+    }
+    if(bodyText.trim()) document.getElementById('edit-draft-body').value = bodyText.trim();
   } catch(e) {
     console.error('載入草稿內容失敗', e);
   }
