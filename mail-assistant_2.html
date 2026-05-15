@@ -902,17 +902,21 @@ function renderMailCard(msg,subject,from,date,type) {
     b2.onclick = function(){ markRead(safeId, this); };
     [b1,b2].forEach(b => actionsDiv.appendChild(b));
   } else if(type === 'archive') {
-    const b1 = mkBtn('btn-ghost', '✅ 存查');
-    const b2 = mkBtn('btn-danger', '🗑');
-    b1.onclick = function(){ markRead(safeId, this); };
-    b2.onclick = function(){ trashMail(safeId, this); };
-    [b1,b2].forEach(b => actionsDiv.appendChild(b));
+    const b1 = mkBtn('btn-yellow', '👥 轉發');
+    const b2 = mkBtn('btn-ghost', '✅ 存查');
+    const b3 = mkBtn('btn-danger', '🗑');
+    b1.onclick = () => fwdById('general', subject||'', safeTid);
+    b2.onclick = function(){ markRead(safeId, this); };
+    b3.onclick = function(){ trashMail(safeId, this); };
+    [b1,b2,b3].forEach(b => actionsDiv.appendChild(b));
   } else {
-    const b1 = mkBtn('btn-ghost', '已讀');
-    const b2 = mkBtn('btn-danger', '🗑');
-    b1.onclick = function(){ markRead(safeId, this); };
-    b2.onclick = function(){ trashMail(safeId, this); };
-    [b1,b2].forEach(b => actionsDiv.appendChild(b));
+    const b1 = mkBtn('btn-yellow', '👥 轉發');
+    const b2 = mkBtn('btn-ghost', '已讀');
+    const b3 = mkBtn('btn-danger', '🗑');
+    b1.onclick = () => fwdById('general', subject||'', safeTid);
+    b2.onclick = function(){ markRead(safeId, this); };
+    b3.onclick = function(){ trashMail(safeId, this); };
+    [b1,b2,b3].forEach(b => actionsDiv.appendChild(b));
   }
 
   card.appendChild(topDiv);
