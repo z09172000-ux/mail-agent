@@ -247,6 +247,40 @@
   <!-- 統計儀表板 -->
   <div class="page" id="page-stats">
     <div style="margin-top:12px">
+      <div style="margin-bottom:10px;">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">📥 匯出電郵統計 Excel</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:4px;align-items:center;">
+            <div style="font-size:11px;color:var(--text3);">模式</div>
+            <button id="mode-btn-month" onclick="setExportMode('month')"
+              style="padding:5px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1.5px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;">月份</button>
+            <button id="mode-btn-custom" onclick="setExportMode('custom')"
+              style="padding:5px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;">自訂</button>
+          </div>
+        </div>
+
+        <!-- 月份模式 -->
+        <div id="export-mode-month" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+          <select id="export-year" style="padding:8px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-family:inherit;outline:none;"></select>
+          <select id="export-month" style="padding:8px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-family:inherit;outline:none;">
+            <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+            <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+            <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+            <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+          </select>
+        </div>
+
+        <!-- 自訂日期模式 -->
+        <div id="export-mode-custom" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+          <div style="font-size:11px;color:var(--text3);">開始</div>
+          <input type="date" id="export-date-from" style="padding:7px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-family:inherit;outline:none;">
+          <div style="font-size:11px;color:var(--text3);">結束</div>
+          <input type="date" id="export-date-to" style="padding:7px 10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-family:inherit;outline:none;">
+        </div>
+
+        <button onclick="exportMonthlyReport()" style="padding:9px 16px;background:var(--green);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;">📥 匯出 Excel</button>
+        <div id="export-status" style="font-size:12px;color:var(--text3);margin-top:6px;"></div>
+      </div>
       <div id="stats-loading" class="loading-wrap" style="display:none"><div class="spinner"></div><div class="loading-text">統計中...</div></div>
       <div id="stats-content">
         <div class="empty-state"><div class="empty-icon">📊</div>點上方「統計」載入</div>
@@ -718,7 +752,7 @@ function startLogin() {
       document.getElementById('user-avatar').textContent = userEmail.charAt(0).toUpperCase();
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app-shell').style.display = 'block';
-      renderAllKeywords(); renderMembers(); loadInbox();
+      renderAllKeywords(); renderMembers(); loadInbox(); initExportSelectors();
     }
   });
   client.requestAccessToken();
@@ -1898,6 +1932,198 @@ function recordAction(type) {
   if(!data[monthKey]) data[monthKey] = {forward_general:0, forward_board:0, forward_assoc:0, sent:0, archived:0, replied:0};
   if(data[monthKey][type] !== undefined) data[monthKey][type]++;
   saveStatsData(data);
+}
+
+function setExportMode(mode) {
+  const isMonth = mode === 'month';
+  document.getElementById('export-mode-month').style.display = isMonth ? 'flex' : 'none';
+  document.getElementById('export-mode-custom').style.display = isMonth ? 'none' : 'flex';
+  document.getElementById('mode-btn-month').style.background = isMonth ? 'var(--accent)' : 'transparent';
+  document.getElementById('mode-btn-month').style.color = isMonth ? '#fff' : 'var(--text2)';
+  document.getElementById('mode-btn-month').style.borderColor = isMonth ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('mode-btn-custom').style.background = !isMonth ? 'var(--accent)' : 'transparent';
+  document.getElementById('mode-btn-custom').style.color = !isMonth ? '#fff' : 'var(--text2)';
+  document.getElementById('mode-btn-custom').style.borderColor = !isMonth ? 'var(--accent)' : 'var(--border)';
+}
+
+function initExportSelectors() {
+  const now = new Date();
+  const yearEl = document.getElementById('export-year');
+  if(!yearEl) return;
+  // 加入 2024-今年的選項
+  for(let y = 2024; y <= now.getFullYear(); y++) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y + '年';
+    if(y === now.getFullYear()) opt.selected = true;
+    yearEl.appendChild(opt);
+  }
+  // 預設當月
+  document.getElementById('export-month').value = now.getMonth() + 1;
+}
+
+async function exportMonthlyReport() {
+  const year = parseInt(document.getElementById('export-year').value);
+  const month = parseInt(document.getElementById('export-month').value);
+  const statusEl = document.getElementById('export-status');
+  statusEl.textContent = '📡 正在從 Gmail 抓取資料...';
+
+  // 判斷模式
+  const isCustom = document.getElementById('export-mode-custom').style.display !== 'none';
+  let afterStr, beforeStr, exportLabel;
+  const pad = n => String(n).padStart(2,'0');
+
+  if(isCustom) {
+    const fromDate = document.getElementById('export-date-from').value;
+    const toDate = document.getElementById('export-date-to').value;
+    if(!fromDate || !toDate) { statusEl.textContent = '⚠️ 請選擇開始和結束日期'; return; }
+    afterStr = fromDate.replace(/-/g,'/');
+    beforeStr = toDate.replace(/-/g,'/');
+    const fd = new Date(fromDate), td = new Date(toDate);
+    exportLabel = `${fd.getMonth()+1}月${fd.getDate()}日-${td.getMonth()+1}月${td.getDate()}日`;
+    year = fd.getFullYear(); month = fd.getMonth()+1;
+  } else {
+    afterStr = year+'/'+pad(month)+'/01';
+    const lastDay = new Date(year, month, 0).getDate();
+    beforeStr = year+'/'+pad(month)+'/'+pad(lastDay);
+    exportLabel = month+'月';
+  }
+
+  try {
+    // 抓收件
+    statusEl.textContent = '📥 抓取收件資料中...';
+    const inboxRes = await fetch(
+      `https://www.googleapis.com/gmail/v1/users/me/messages?q=in:inbox+after:${afterStr}+before:${beforeStr}&maxResults=500`,
+      {headers:{'Authorization':'Bearer '+accessToken}}
+    );
+    const inboxData = await inboxRes.json();
+    const inboxMsgIds = inboxData.messages || [];
+
+    // 抓寄件
+    statusEl.textContent = '📤 抓取寄件資料中...';
+    const sentRes = await fetch(
+      `https://www.googleapis.com/gmail/v1/users/me/messages?q=in:sent+after:${afterStr}+before:${beforeStr}&maxResults=500`,
+      {headers:{'Authorization':'Bearer '+accessToken}}
+    );
+    const sentData = await sentRes.json();
+    const sentMsgIds = sentData.messages || [];
+
+    // 取得收件詳細
+    statusEl.textContent = `📬 讀取 ${inboxMsgIds.length} 封收件詳細...`;
+    const inboxDetails = await Promise.all(
+      inboxMsgIds.slice(0,200).map(m =>
+        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+          {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json())
+      )
+    );
+
+    // 取得寄件詳細
+    statusEl.textContent = `📮 讀取 ${sentMsgIds.length} 封寄件詳細...`;
+    const sentDetails = await Promise.all(
+      sentMsgIds.slice(0,200).map(m =>
+        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=To&metadataHeaders=Date`,
+          {headers:{'Authorization':'Bearer '+accessToken}}).then(r=>r.json())
+      )
+    );
+
+    // 整理資料
+    const formatDateTW = (dateStr) => {
+      if(!dateStr) return '';
+      const d = new Date(dateStr);
+      return (d.getMonth()+1) + '/' + d.getDate();
+    };
+
+    const cleanSender = (from) => {
+      if(!from) return '';
+      const match = from.match(/^"?([^"<]+)"?\s*<?/);
+      return (match ? match[1].trim() : from).replace(/"/g,'').trim();
+    };
+
+    const inboxRows = inboxDetails
+      .filter(m => m.payload)
+      .map(m => {
+        const date = formatDateTW(getHeader(m,'Date'));
+        const from = cleanSender(getHeader(m,'From'));
+        const subject = getHeader(m,'Subject') || '（無主旨）';
+        return [date, from, subject, '', ''];  // 收件日期, 寄件人, 主旨, 回覆日期, 處理
+      })
+      .sort((a,b) => a[0].localeCompare(b[0]));
+
+    const sentRows = sentDetails
+      .filter(m => m.payload)
+      .map(m => {
+        const date = formatDateTW(getHeader(m,'Date'));
+        const subject = getHeader(m,'Subject') || '（無主旨）';
+        return [date, subject, ''];  // 寄件日期, 主旨, 備註
+      })
+      .sort((a,b) => a[0].localeCompare(b[0]));
+
+    statusEl.textContent = '📊 產生 Excel 檔案...';
+
+    // 用 SheetJS 產生 Excel
+    buildExcel(year, month, inboxRows, sentRows, exportLabel);
+    statusEl.textContent = `✅ 已匯出！收件 ${inboxRows.length} 筆 / 寄件 ${sentRows.length} 筆`;
+
+  } catch(e) {
+    statusEl.textContent = '❌ 匯出失敗：' + e.message;
+    console.error(e);
+  }
+}
+
+function buildExcel(year, month, inboxRows, sentRows, exportLabel) {
+  exportLabel = exportLabel || (month+'月');
+  // 動態載入 SheetJS
+  if(typeof XLSX === 'undefined') {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    script.onload = () => buildExcel(year, month, inboxRows, sentRows);
+    document.head.appendChild(script);
+    return;
+  }
+
+  const wb = XLSX.utils.book_new();
+  const yearTW = year - 1911; // 民國年
+  const sheetName = `${yearTW}年度${exportLabel}電郵`;
+
+  // 合併收件和寄件成同一張表（左右排列）
+  const maxRows = Math.max(inboxRows.length, sentRows.length);
+  const wsData = [];
+
+  // 標題列
+  wsData.push([
+    `${yearTW}年度-信箱收件`, '', '', '', '',
+    `${yearTW}年度-信箱寄件`, '', ''
+  ]);
+  wsData.push([
+    '收件日期', '寄件人', '主旨', '回覆日期', '處理',
+    '寄件日期', '主旨', '備註'
+  ]);
+
+  // 資料列
+  for(let i = 0; i < maxRows; i++) {
+    const inbox = inboxRows[i] || ['', '', '', '', ''];
+    const sent = sentRows[i] || ['', '', ''];
+    wsData.push([...inbox, ...sent]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // 欄寬設定
+  ws['!cols'] = [
+    {wch:10}, {wch:20}, {wch:45}, {wch:10}, {wch:15},
+    {wch:10}, {wch:45}, {wch:15}
+  ];
+
+  // 合併標題儲存格
+  ws['!merges'] = [
+    {s:{r:0,c:0}, e:{r:0,c:4}},  // 收件標題
+    {s:{r:0,c:5}, e:{r:0,c:7}}   // 寄件標題
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+  // 下載
+  const filename = `${yearTW}年${exportLabel}電郵統計.xlsx`;
+  XLSX.writeFile(wb, filename);
 }
 
 async function loadStats() {
