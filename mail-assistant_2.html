@@ -1973,13 +1973,17 @@ async function exportMonthlyReport() {
   const pad = n => String(n).padStart(2,'0');
 
   if(isCustom) {
-    const fromDate = document.getElementById('export-date-from').value;
-    const toDate = document.getElementById('export-date-to').value;
-    if(!fromDate || !toDate) { statusEl.textContent = '⚠️ 請選擇開始和結束日期'; return; }
-    afterStr = fromDate.replace(/-/g,'/');
-    beforeStr = toDate.replace(/-/g,'/');
-    const fd = new Date(fromDate), td = new Date(toDate);
-    exportLabel = `${fd.getMonth()+1}月${fd.getDate()}日-${td.getMonth()+1}月${td.getDate()}日`;
+    const fromVal = document.getElementById('export-date-from').value;
+    const toVal = document.getElementById('export-date-to').value;
+    if(!fromVal || !toVal) { statusEl.textContent = '⚠️ 請選擇開始和結束日期'; return; }
+    // Gmail API 用 yyyy/mm/dd 格式，input 回傳 yyyy-mm-dd 需要轉換
+    afterStr = fromVal.replace(/-/g,'/');
+    // before 要加一天才能包含當天
+    const toDateObj = new Date(toVal);
+    toDateObj.setDate(toDateObj.getDate() + 1);
+    beforeStr = toDateObj.getFullYear()+'/'+pad(toDateObj.getMonth()+1)+'/'+pad(toDateObj.getDate());
+    const fd = new Date(fromVal), td = new Date(toVal);
+    exportLabel = `${fd.getMonth()+1}月${fd.getDate()}日至${td.getMonth()+1}月${td.getDate()}日`;
     year = fd.getFullYear(); month = fd.getMonth()+1;
   } else {
     afterStr = year+'/'+pad(month)+'/01';
@@ -2029,7 +2033,7 @@ async function exportMonthlyReport() {
     const formatDateTW = (dateStr) => {
       if(!dateStr) return '';
       const d = new Date(dateStr);
-      return (d.getMonth()+1) + '/' + d.getDate();
+      return (d.getMonth()+1) + '月' + d.getDate() + '日';
     };
 
     const cleanSender = (from) => {
