@@ -1976,19 +1976,17 @@ async function exportMonthlyReport() {
     const fromVal = document.getElementById('export-date-from').value;
     const toVal = document.getElementById('export-date-to').value;
     if(!fromVal || !toVal) { statusEl.textContent = '⚠️ 請選擇開始和結束日期'; return; }
-    // Gmail API 用 yyyy/mm/dd 格式，input 回傳 yyyy-mm-dd 需要轉換
-    afterStr = fromVal.replace(/-/g,'/');
-    // before 要加一天才能包含當天
-    const toDateObj = new Date(toVal);
-    toDateObj.setDate(toDateObj.getDate() + 1);
-    beforeStr = toDateObj.getFullYear()+'/'+pad(toDateObj.getMonth()+1)+'/'+pad(toDateObj.getDate());
-    const fd = new Date(fromVal), td = new Date(toVal);
+    const fd = new Date(fromVal + 'T00:00:00');
+    const td = new Date(toVal + 'T23:59:59');
+    afterStr = Math.floor(fd.getTime()/1000);
+    beforeStr = Math.floor(td.getTime()/1000) + 1;
     exportLabel = `${fd.getMonth()+1}月${fd.getDate()}日至${td.getMonth()+1}月${td.getDate()}日`;
     year = fd.getFullYear(); month = fd.getMonth()+1;
   } else {
-    afterStr = year+'/'+pad(month)+'/01';
-    const lastDay = new Date(year, month, 0).getDate();
-    beforeStr = year+'/'+pad(month)+'/'+pad(lastDay);
+    const startDate = new Date(year, month-1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+    afterStr = Math.floor(startDate.getTime()/1000);
+    beforeStr = Math.floor(endDate.getTime()/1000) + 1;
     exportLabel = month+'月';
   }
 
