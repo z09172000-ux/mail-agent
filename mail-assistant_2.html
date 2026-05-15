@@ -1576,71 +1576,75 @@ async function openEditDraft(draftId, subject, to, snippet) {
   document.getElementById('edit-draft-id').value = draftId;
   document.getElementById('edit-draft-subject').value = subject || '';
   document.getElementById('edit-draft-to').value = to || '';
-  document.getElementById('edit-draft-body').value = '';
+  document.getElementById('edit-draft-body').value = '載入中...';
   document.getElementById('edit-attach-label').textContent = '支援 PDF、圖片、文件等';
   document.getElementById('edit-draft-modal').classList.add('open');
-  // 綁定快速句子按鈕
+
   const qbtns = [
     ['qbtn1', '各位會員好：\n如標題附件，請參考，謝謝。\n'],
     ['qbtn2', '敬請查照，謝謝。'],
     ['qbtn3', '如有任何問題，請與本會聯繫，謝謝。'],
     ['qbtn4', '煩請協助轉知，謝謝。']
   ];
-  qbtns.forEach(([id, text]) => {
-    const btn = document.getElementById(id);
-    if(btn) btn.onclick = () => insertText('edit-draft-body', text);
+  qbtns.forEach(function(item) {
+    const btn = document.getElementById(item[0]);
+    if(btn) btn.onclick = function(){ insertText('edit-draft-body', item[1]); };
   });
 
-  // 嘗試載入草稿完整內容
   try {
-    const res = await fetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${draftId}?format=full`, {
+    const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/drafts/' + draftId + '?format=full', {
       headers: { 'Authorization': 'Bearer ' + accessToken }
     });
     const draft = await res.json();
     const msg = draft.message || {};
 
-    // 取得收件人
+    // 更新收件人
     const toHeader = getHeader(msg, 'To') || getHeader(msg, 'Bcc') || to;
     document.getElementById('edit-draft-to').value = toHeader;
 
-    // 取得內文（純文字）
-    const b64decode = (data) => {
+    // base64 解碼
+    const b64dec = function(data) {
       try {
         const b64 = data.replace(/-/g,'+').replace(/_/g,'/');
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
         return new TextDecoder('utf-8').decode(bytes);
       } catch(e) { return ''; }
     };
-    // 優先找 text/plain，找不到就從 HTML 轉換
-    const findPlain = (part) => {
-      if(!part) return '';
-      if(part.mimeType==='text/plain' && part.body?.data) return b64decode(part.body.data);
-      if(part.parts){ for(const p of part.parts){ const r=findPlain(p); if(r) return r; } }
-      return '';
-    };
-    const findHtml = (part) => {
-      if(!part) return '';
-      if(part.mimeType==='text/html' && part.body?.data) return b64decode(part.body.data);
-      if(part.parts){ for(const p of part.parts){ const r=findHtml(p); if(r) return r; } }
-      return '';
-    };
-    let bodyText = findPlain(msg.payload);
-    if(!bodyText.trim()) {
-      // 從 HTML 轉純文字
-      const html = findHtml(msg.payload);
-      if(html) {
-        const tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        // 移除結語區塊（border-top 的 div）
-        tmp.querySelectorAll('div[style*="border-top"]').forEach(el => el.remove());
-        tmp.querySelectorAll('hr, br').forEach(function(el){ el.parentNode.replaceChild(document.createTextNode(' '), el); });
-        bodyText = tmp.textContent || tmp.innerText || '';
+
+    // 遞迴找 part
+    const findPart = function(part, mime) {
+      if(!part) return null;
+      if(part.mimeType === mime && part.body && part.body.data) return part;
+      if(part.parts) {
+        for(let i=0;i<part.parts.length;i++) {
+          const r = findPart(part.parts[i], mime);
+          if(r) return r;
+        }
       }
+      return null;
+    };
+
+    const plainPart = findPart(msg.payload, 'text/plain');
+    const htmlPart  = findPart(msg.payload, 'text/html');
+    let bodyText = '';
+
+    if(plainPart) {
+      bodyText = b64dec(plainPart.body.data);
+    } else if(htmlPart) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = b64dec(htmlPart.body.data);
+      // 移除公會結語
+      tmp.querySelectorAll('div[style*="border-top"],div[style*="padding-top"],hr').forEach(function(el){ el.remove(); });
+      bodyText = tmp.innerText || tmp.textContent || '';
     }
-    if(bodyText.trim()) document.getElementById('edit-draft-body').value = bodyText.trim();
+
+    bodyText = bodyText.replace(/[ \t]{2,}/g, ' ').replace(/[\n]{3,}/g, '\n\n').trim();
+    document.getElementById('edit-draft-body').value = bodyText || '';
+
   } catch(e) {
+    document.getElementById('edit-draft-body').value = '';
     console.error('載入草稿內容失敗', e);
   }
 }
@@ -1881,30 +1885,51 @@ async function previewDraft(draftId, subject) {
   document.getElementById('detail-modal-body').innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div class="loading-text">載入中...</div></div>';
   document.getElementById('detail-modal').classList.add('open');
   try {
-    const draft = await gmailFetch(`https://www.googleapis.com/gmail/v1/users/me/drafts/${draftId}?format=full`);
+    const draft = await gmailFetch('https://www.googleapis.com/gmail/v1/users/me/drafts/' + draftId + '?format=full');
     const msg = draft.message || {};
-    const b64decode = (data) => {
+
+    const b64dec = function(data) {
       try {
         const b64 = data.replace(/-/g,'+').replace(/_/g,'/');
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
         return new TextDecoder('utf-8').decode(bytes);
       } catch(e) { return ''; }
     };
-    const findBody = (part) => {
+
+    const findBody = function(part) {
       if(!part) return '';
-      if(part.mimeType==='text/html' && part.body?.data) return b64decode(part.body.data);
-      if(part.mimeType==='text/plain' && part.body?.data) return '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;">'+b64decode(part.body.data)+'</pre>';
-      if(part.parts){ for(const p of part.parts){ const r=findBody(p); if(r) return r; } }
+      if(part.mimeType==='text/html' && part.body && part.body.data) return b64dec(part.body.data);
+      if(part.mimeType==='text/plain' && part.body && part.body.data) return '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;">' + b64dec(part.body.data) + '</pre>';
+      if(part.parts) { for(let i=0;i<part.parts.length;i++) { const r=findBody(part.parts[i]); if(r) return r; } }
       return '';
     };
+
+    // 找附件
+    const atts = [];
+    const findAtts = function(part) {
+      if(!part) return;
+      if(part.filename && part.filename.length > 0 && part.body && part.body.attachmentId)
+        atts.push(part.filename);
+      if(part.parts) part.parts.forEach(function(p){ findAtts(p); });
+    };
+    findAtts(msg.payload);
+
     const bodyHtml = findBody(msg.payload) || '<p style="color:#888">（無內容）</p>';
-    const to = getHeader(msg,'To')||'';
-    const bcc = getHeader(msg,'Bcc')||'';
-    const recipientInfo = bcc ? `BCC ${bcc.split(',').length} 位` : to;
-    document.getElementById('detail-modal-sender').textContent = '收件人：' + recipientInfo;
-    document.getElementById('detail-modal-body').innerHTML = `<div style="font-size:13px;line-height:1.7;color:var(--text2);">${bodyHtml}</div>`;
+    const to  = getHeader(msg,'To') || '';
+    const bcc = getHeader(msg,'Bcc') || '';
+    document.getElementById('detail-modal-sender').textContent = '收件人：' + (bcc ? 'BCC ' + bcc.split(',').length + ' 位' : to);
+
+    let attHtml = '';
+    if(atts.length) {
+      attHtml = '<div style="margin-top:10px;padding:10px;background:var(--surface2);border-radius:8px;">'
+        + '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">📎 附件（' + atts.length + ' 個）</div>'
+        + atts.map(function(name){ return '<div style="font-size:12px;color:var(--text2);padding:2px 0;">📄 ' + esc(name) + '</div>'; }).join('')
+        + '</div>';
+    }
+
+    document.getElementById('detail-modal-body').innerHTML = '<div style="font-size:13px;line-height:1.7;color:var(--text2);">' + bodyHtml + '</div>' + attHtml;
   } catch(e) {
     document.getElementById('detail-modal-body').innerHTML = '<p style="color:var(--red)">❌ 無法載入草稿內容</p>';
   }
