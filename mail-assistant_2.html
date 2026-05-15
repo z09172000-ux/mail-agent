@@ -1739,11 +1739,13 @@ async function loadDrafts() {
           </div>
           <div class="mail-actions">
             <button class="btn-sm btn-primary">👁 預覽</button>
+            <button class="btn-sm btn-ghost">✏️ 編修</button>
             <button class="btn-sm btn-yellow">📤 寄出</button>
-            <button class="btn-sm btn-danger">🗑 刪除</button>
+            <button class="btn-sm btn-danger">🗑</button>
           </div>`;
 
         card.querySelector('.btn-primary').onclick = () => previewDraft(d.id, subject);
+        card.querySelector('.btn-ghost').onclick = () => openEditDraft(d.id, subject, to||bcc||'', '');
         card.querySelector('.btn-yellow').onclick = function(){ sendDraft(d.id, this); };
         card.querySelector('.btn-danger').onclick = function(){ deleteDraft(d.id, this); };
         contentEl.appendChild(card);
