@@ -1132,6 +1132,9 @@ function makeEmailWithAttachments(from, bcc, subject, htmlBody, attachments) {
   const boundary = 'bnd' + Date.now();
   const subjectEncoded = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
   const bodyB64 = btoa(unescape(encodeURIComponent(htmlBody)));
+
+  // 組裝純文字 MIME（header + base64 body + base64 附件）
+  // 全部都是 ASCII 字元，可以安全用 btoa()
   let mime = '';
   mime += 'From: ' + from + '\r\n';
   mime += 'Bcc: ' + bcc + '\r\n';
@@ -1143,12 +1146,12 @@ function makeEmailWithAttachments(from, bcc, subject, htmlBody, attachments) {
   mime += 'Content-Type: text/html; charset=UTF-8\r\n';
   mime += 'Content-Transfer-Encoding: base64\r\n';
   mime += '\r\n';
-  mime += bodyB64 + '\r\n';
+  mime += bodyB64.replace(/(.{76})/g, '$1\r\n') + '\r\n';
+
   for(const att of attachments) {
     if(!att.data) continue;
-    const attB64 = (att.attachmentId === null)
-      ? att.data
-      : att.data.replace(/-/g,'+').replace(/_/g,'/');
+    // 統一轉成標準 base64（移除 base64url 的 - 和 _）
+    const attB64 = att.data.replace(/-/g,'+').replace(/_/g,'/');
     const encName = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(att.filename))) + '?=';
     mime += '--' + boundary + '\r\n';
     mime += 'Content-Type: ' + att.mimeType + '; name="' + encName + '"\r\n';
@@ -1158,9 +1161,14 @@ function makeEmailWithAttachments(from, bcc, subject, htmlBody, attachments) {
     mime += attB64.replace(/(.{76})/g, '$1\r\n') + '\r\n';
   }
   mime += '--' + boundary + '--';
-  return btoa(mime).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-}
 
+  // ✅ 用 Uint8Array 逐字元轉換，確保二進位安全（不讓 btoa 遇到多字節字元）
+  const bytes = new Uint8Array(mime.length);
+  for(let i = 0; i < mime.length; i++) bytes[i] = mime.charCodeAt(i) & 0xff;
+  let binary = '';
+  for(let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
 // ── REPLY DRAFT ──
 function openReplyDraft(msgId, subject, senderName, senderEmail) {
   const cleanEmail = senderEmail.match(/<(.+?)>/)?.[1] || senderEmail;
