@@ -1523,12 +1523,16 @@ async function downloadAttachment(msgId, attachmentId, filename, mimeType) {
 }
 
 // ── EDIT DRAFT ──
+// 暫存原始草稿的附件資料（開啟編修時記錄，儲存時一併送出）
+window._existingAttachments = [];
+
 async function openEditDraft(draftId, subject, to, snippet) {
   document.getElementById('edit-draft-id').value = draftId;
   document.getElementById('edit-draft-subject').value = subject || '';
   document.getElementById('edit-draft-to').value = to || '';
   document.getElementById('edit-draft-body').value = '載入中...';
   document.getElementById('edit-attach-label').textContent = '支援 PDF、圖片、文件等';
+  window._existingAttachments = []; // 重置
   document.getElementById('edit-draft-modal').classList.add('open');
 
   const qbtns = [
@@ -1548,6 +1552,7 @@ async function openEditDraft(draftId, subject, to, snippet) {
     });
     const draft = await res.json();
     const msg = draft.message || {};
+    const msgId = msg.id || '';
     const toHeader = getHeader(msg, 'To') || getHeader(msg, 'Bcc') || to;
     document.getElementById('edit-draft-to').value = toHeader;
 
@@ -1571,6 +1576,39 @@ async function openEditDraft(draftId, subject, to, snippet) {
       }
       return null;
     };
+
+    // ── 讀取原始附件清單並下載資料 ──
+    const foundAtts = [];
+    const findAtts = function(part) {
+      if(!part) return;
+      if(part.filename && part.filename.length > 0 && part.body && part.body.attachmentId) {
+        foundAtts.push({filename: part.filename, attachmentId: part.body.attachmentId, mimeType: part.mimeType || 'application/octet-stream'});
+      }
+      if(part.parts) part.parts.forEach(function(p){ findAtts(p); });
+    };
+    findAtts(msg.payload);
+
+    // 下載每個附件的 base64 資料
+    for(const att of foundAtts) {
+      try {
+        const attRes = await fetch(
+          'https://www.googleapis.com/gmail/v1/users/me/messages/' + msgId + '/attachments/' + att.attachmentId,
+          { headers: { 'Authorization': 'Bearer ' + accessToken } }
+        );
+        const attData = await attRes.json();
+        // Gmail 回傳 base64url，轉成標準 base64 供 MIME 使用
+        att.data = (attData.data || '').replace(/-/g,'+').replace(/_/g,'/');
+        att.attachmentId = null; // 標記為「已下載的資料」，不是 attachmentId 參考
+        window._existingAttachments.push(att);
+      } catch(e) { console.warn('附件下載失敗：', att.filename, e); }
+    }
+
+    // 顯示原始附件清單
+    if(window._existingAttachments.length > 0) {
+      const names = window._existingAttachments.map(a => '📎 ' + a.filename).join('　');
+      document.getElementById('edit-attach-label').textContent = '原有附件：' + names + '　（可再新增）';
+    }
+
     const plainPart = findPart(msg.payload, 'text/plain');
     const htmlPart  = findPart(msg.payload, 'text/html');
     let bodyText = '';
@@ -1617,20 +1655,23 @@ async function saveEditDraft() {
   const sig = signatureEnabled ? `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #ddd;color:#555;font-size:13px;line-height:2;">社團法人澎湖縣職能治療師公會<br>880澎湖縣馬公市光榮里縣府新村23號1樓<br>理事長 林聖凱<br>總幹事 林蘭蕙<br>電話：0932463513<br>E-mail：<a href="mailto:pehotu.office@gmail.com">pehotu.office@gmail.com</a></div>` : '';
   const htmlBody = '<div style="font-family:Noto Sans TC,sans-serif;font-size:14px;line-height:1.8;">' + body.replace(/\n/g,'<br>') + sig + '</div>';
 
+  // 讀取使用者新選的附件
   const attachInput = document.getElementById('edit-draft-attach');
-  const attachments = [];
+  const newAttachments = [];
   for(const file of (attachInput?.files || [])) {
     const data = await new Promise(resolve => {
       const reader = new FileReader();
       reader.onload = e => resolve(e.target.result.split(',')[1]);
       reader.readAsDataURL(file);
     });
-    attachments.push({filename:file.name, data, mimeType:file.type||'application/octet-stream', attachmentId:null});
+    newAttachments.push({filename:file.name, data, mimeType:file.type||'application/octet-stream', attachmentId:null});
   }
 
+  // ✅ 合併原始附件（已下載）＋ 使用者新選的附件
+  const attachments = [...(window._existingAttachments || []), ...newAttachments];
+
   try {
-    console.log('saveEditDraft 開始', draftId, to, subject, body.length);
-    // ✅ makeEmail 已定義，這裡可正常呼叫
+    console.log('saveEditDraft 開始', draftId, to, subject, body.length, '附件數：', attachments.length);
     const raw = attachments.length > 0
       ? makeEmailWithAttachments(userEmail, to, subject, htmlBody, attachments)
       : makeEmail(to, subject, htmlBody);
