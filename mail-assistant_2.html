@@ -1849,12 +1849,25 @@ async function sendDraftScheduled(draftId, btn, card) {
     const now = new Date();
     if(scheduleTime <= now) { showToast('⚠️ 排程時間必須在未來'); return; }
     const diff = scheduleTime - now;
-    const mins = Math.round(diff / 60000);
-    const label = mins < 60 ? mins + ' 分鐘後' : Math.round(mins/60) + ' 小時後';
-    showToast('⏰ 已排程！將在 ' + label + ' 寄出');
-    setTimeout(function(){ sendDraft(draftId, btn); }, diff);
-    btn.textContent = '⏰ ' + label;
+
+    // 顯示設定的精確時間（而不是「X分鐘後」，避免因按下時間不同造成誤差感）
+    const pad = n => String(n).padStart(2, '0');
+    const timeLabel = (scheduleTime.getMonth()+1) + '/' + scheduleTime.getDate()
+      + ' ' + pad(scheduleTime.getHours()) + ':' + pad(scheduleTime.getMinutes());
+    showToast('⏰ 已排程！將於 ' + timeLabel + ' 寄出');
+    btn.textContent = '⏰ ' + timeLabel;
     btn.disabled = true;
+
+    // 每秒重新計算剩餘時間，確保精確觸發
+    const targetTime = scheduleTime.getTime();
+    const checkAndSend = function() {
+      if(Date.now() >= targetTime) {
+        sendDraft(draftId, btn);
+      } else {
+        setTimeout(checkAndSend, 1000);
+      }
+    };
+    setTimeout(checkAndSend, Math.max(diff - 1000, 0));
     return;
   }
   sendDraft(draftId, btn);
